@@ -4,14 +4,11 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 09-answer
+      - 10-answer
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    env:
-      RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab
-      APP_IMAGE: aandi-deployment-runtime-lab:latest
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -36,6 +33,26 @@ jobs:
           cp Dockerfile release/Dockerfile
           cp .env.example release/.env.example
           cp -R deploy release/deploy
+          cp -R scripts release/scripts
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: release
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab
+      APP_IMAGE: aandi-deployment-runtime-lab:latest
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: release
 
       - name: Write SSH key
         run: |
@@ -74,9 +91,28 @@ jobs:
             MYSQL_DATABASE=${{ secrets.PROD_MYSQL_DATABASE }}
             MYSQL_ROOT_PASSWORD=${{ secrets.PROD_MYSQL_ROOT_PASSWORD }}
             ENV
-            docker compose -f deploy/compose.prod.yaml down || true
-            docker build -t ${APP_IMAGE} .
-            docker compose --env-file .env -f deploy/compose.prod.yaml up -d
-            docker compose --env-file .env -f deploy/compose.prod.yaml ps
-            docker logs --tail 50 aandi-app
+            chmod +x scripts/deploy.sh scripts/check-deploy.sh
+            APP_IMAGE=${APP_IMAGE} bash scripts/deploy.sh ${RELEASE_DIR}
+          EOF
+
+  verify:
+    runs-on: ubuntu-latest
+    needs: deploy
+    env:
+      RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab
+    steps:
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/aandi-ec2.pem
+          chmod 600 ~/.ssh/aandi-ec2.pem
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Verify deployment on EC2
+        run: |
+          ssh -i ~/.ssh/aandi-ec2.pem "${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}" <<EOF
+            set -e
+            cd ${RELEASE_DIR}
+            chmod +x scripts/check-deploy.sh
+            bash scripts/check-deploy.sh ${RELEASE_DIR}
           EOF

@@ -1,17 +1,17 @@
-# 배포와 실행 환경 체크리스트
+# 자동화와 운영 흐름 체크리스트
 
 ## 학생 체크리스트
 
-- [ ] `Dockerfile`이 jar를 복사하고 실행하도록 완성했습니다.
-- [ ] `application-prod.yaml`에서 운영값을 환경변수로 분리했습니다.
-- [ ] `deploy/compose.prod.yaml`에서 앱, MySQL, Redis 연결을 확인했습니다.
-- [ ] `deploy.yml`에서 SSH 키와 운영 비밀값을 GitHub Secrets로 받게 만들었습니다.
-- [ ] 배포 후 `docker compose ps` 또는 `docker logs`로 기동 상태를 확인했습니다.
+- [ ] build, test, deploy, verify 순서를 workflow에서 찾을 수 있습니다.
+- [ ] CI와 CD를 이번 코드 기준으로 설명할 수 있습니다.
+- [ ] `deploy.sh`와 `check-deploy.sh` 역할 차이를 말할 수 있습니다.
+- [ ] GitHub Secrets를 workflow 안에서 직접 값 대신 참조로 쓰고 있음을 확인했습니다.
+- [ ] verify 단계가 왜 필요한지 설명할 수 있습니다.
 
 ## 강사 / PPT 체크리스트
 
-- [ ] 로컬 실행과 운영 실행의 차이를 그림으로 설명할 수 있습니다.
-- [ ] jar → Dockerfile → EC2 → 로그 확인 흐름을 한 화면에서 보여줄 수 있습니다.
-- [ ] GitHub Secrets에 pem 키와 계정 정보를 왜 넣어야 하는지 설명할 수 있습니다.
-- [ ] `application.yaml`과 `application-prod.yaml` 차이를 시연할 수 있습니다.
-- [ ] 배포 성공 여부를 “로그 확인”으로 판단하는 장면을 포함했습니다.
+- [ ] 수동 배포와 자동 배포 차이를 사례로 설명할 수 있습니다.
+- [ ] build → test → deploy → verify 그림이 있는가
+- [ ] workflow와 script 분리 이유를 시연할 수 있는가
+- [ ] verify 단계가 빠졌을 때 생기는 운영 위험을 설명할 수 있는가
+- [ ] Secrets를 코드에 직접 적지 않는 이유를 분명히 말할 수 있는가
