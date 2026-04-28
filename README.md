@@ -1,52 +1,48 @@
-# 배포와 실행 환경
+# spring-boot-deployment-runtime-lab
 
-> Docker, EC2, GitHub Actions, Secrets를 이용해 로컬에서 돌아가던 Spring Boot 앱을 운영 환경으로 옮겨보는 실습입니다.
+> Docker, EC2, GitHub Actions, Secrets를 이용한 배포와 실행 환경 실습 레포입니다.
 
-> 이번 시퀀스 한 줄 요약  
-> 이번 실습은 실행 가능한 애플리케이션을 하나의 배포 단위로 묶고, 환경변수와 시크릿을 분리한 뒤, GitHub Actions로 EC2까지 전달해보는 과정입니다.
+이 브랜치는 실습 starter가 아니라 안내용 `main` 브랜치입니다.  
+학생은 `09-implementation`에서 시작하고, 강사는 `09-answer`를 비교 기준으로 사용합니다.
 
-## 이 레포에서 다루는 것
+## 이 레포가 다루는 시퀀스
 
-- Dockerfile로 애플리케이션 패키징하기
+- `09-deployment-and-runtime-environment`
+
+## 이 레포에서 배우는 것
+
+- Spring Boot jar를 Docker 실행 단위로 묶기
 - `application-prod.yaml`로 운영 설정 분리하기
-- GitHub Actions에서 jar를 만들고 EC2로 전달하기
-- GitHub Secrets에 SSH 키와 운영 비밀값 숨기기
-- 컨테이너 로그로 배포 결과 확인하기
+- GitHub Actions로 기본 배포 흐름 만들기
+- GitHub Secrets로 EC2 pem key, 계정, 시크릿 분리하기
+- 배포 후 로그로 기동 상태 확인하기
 
-## 문서
+## 브랜치 안내
 
-- [이론 문서](./docs/theory.md)
-- [구현 문서](./docs/implementation.md)
-- [정답 가이드](./docs/answer-guide.md)
-- [체크리스트](./docs/checklist.md)
-- [제공 자산 정리](./docs/assets.md)
+- `09-implementation`: 학생용 starter 브랜치
+- `09-answer`: 완성 정답 브랜치
+- `main`: 레포 소개와 브랜치 안내 브랜치
 
-## 학생이 직접 구현하는 핵심 파일
+## 문서 안내
 
-- [`Dockerfile`](./Dockerfile)
-- [`src/main/resources/application-prod.yaml`](./src/main/resources/application-prod.yaml)
-- [`deploy/compose.prod.yaml`](./deploy/compose.prod.yaml)
-- [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml)
+- [레포 가이드](./docs/repo-guide.md)
+- [브랜치 가이드](./docs/branch-guide.md)
+- [시퀀스 맵](./docs/sequence-map.md)
 
-## 실행 흐름 요약
+실습 문서는 각 시퀀스 브랜치에서 확인합니다.
 
-1. `./gradlew test bootJar`로 애플리케이션 jar를 만듭니다.
-2. `Dockerfile`로 앱 이미지를 만듭니다.
-3. `application-prod.yaml`과 `.env`로 운영 설정을 분리합니다.
-4. GitHub Actions가 jar와 배포 파일을 EC2로 전달합니다.
-5. EC2에서 `docker compose`로 컨테이너를 다시 띄우고 로그를 확인합니다.
+- `09-implementation`
+  - `README.md`
+  - `docs/theory.md`
+  - `docs/implementation.md`
+  - `docs/answer-guide.md`
+  - `docs/checklist.md`
+  - `docs/assets.md`
+- `09-answer`
+  - 같은 문서 구조 + 완성 코드
 
-## 로컬 확인
+## 시작 방법
 
-```bash
-docker compose up -d
-./gradlew test
-./gradlew bootRun
-```
-
-## 운영 배포 흐름
-
-1. GitHub Secrets에 EC2 접속 정보와 운영 비밀값을 넣습니다.
-2. GitHub Actions에서 `deploy.yml`을 실행합니다.
-3. EC2에 업로드된 jar, `Dockerfile`, `compose.prod.yaml`로 운영 컨테이너를 다시 띄웁니다.
-4. 마지막에 `docker logs`로 애플리케이션 로그를 확인합니다.
+1. 학생: `09-implementation`으로 이동
+2. 문서 순서: `README` → `docs/theory.md` → `docs/implementation.md`
+3. 구현 후 `09-answer`와 비교
