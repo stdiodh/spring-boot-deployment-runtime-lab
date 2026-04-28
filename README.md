@@ -28,6 +28,9 @@
 - [`deploy/compose.prod.yaml`](./deploy/compose.prod.yaml)
 - [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml)
 
+이 브랜치는 `09-implementation` starter입니다.  
+핵심 파일에는 TODO가 들어 있고, 정답 비교는 `09-answer` 브랜치에서 합니다.
+
 ## 실행 흐름 요약
 
 1. `./gradlew test bootJar`로 애플리케이션 jar를 만듭니다.

@@ -1,8 +1,11 @@
 spring:
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    # TODO 1. 운영 DB 주소를 환경변수로 받으세요.
+    url: ${DB_URL:}
+    # TODO 2. 운영 DB 계정을 환경변수로 받으세요.
+    username: ${DB_USERNAME:}
+    # TODO 3. 운영 DB 비밀번호를 환경변수로 받으세요.
+    password: ${DB_PASSWORD:}
   jpa:
     hibernate:
       ddl-auto: update
@@ -12,7 +15,8 @@ spring:
     open-in-view: false
   data:
     redis:
-      host: ${REDIS_HOST}
+      # TODO 4. Redis host를 환경변수로 받으세요.
+      host: ${REDIS_HOST:}
       port: ${REDIS_PORT:6379}
   mail:
     host: ${MAIL_HOST}
@@ -30,8 +34,9 @@ spring:
       client:
         registration:
           google:
-            client-id: ${GOOGLE_CLIENT_ID}
-            client-secret: ${GOOGLE_CLIENT_SECRET}
+            # TODO 5. OAuth client id / secret도 운영 환경변수로 연결하세요.
+            client-id: ${GOOGLE_CLIENT_ID:}
+            client-secret: ${GOOGLE_CLIENT_SECRET:}
 
 logging:
   level:
@@ -40,9 +45,10 @@ logging:
     org.hibernate.SQL: WARN
 
 jwt:
-  secret: ${JWT_SECRET}
+  # TODO 6. JWT 시크릿을 코드에 고정하지 말고 환경변수로 받으세요.
+  secret: ${JWT_SECRET:}
   expiration-ms: ${JWT_EXPIRATION_MS:3600000}
 
 app:
-  frontend-url: ${APP_FRONTEND_URL}
-  password-reset-url: ${APP_PASSWORD_RESET_URL}
+  frontend-url: ${APP_FRONTEND_URL:}
+  password-reset-url: ${APP_PASSWORD_RESET_URL:}

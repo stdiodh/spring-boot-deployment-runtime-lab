@@ -69,6 +69,7 @@
 - 만들어진 jar와 `Dockerfile`, `deploy/compose.prod.yaml`을 EC2로 올립니다.
 - EC2 안에서 `.env`를 만들고 `docker compose up -d`를 다시 실행합니다.
 - SSH 키, DB 비밀번호, OAuth 시크릿은 모두 GitHub Secrets에서 받습니다.
+- starter에서는 `deploy.yml`이 `echo TODO...` 상태이므로, 실제 업로드와 배포 명령을 학생이 직접 채워야 합니다.
 
 ### 5. 마지막에 로그를 확인합니다
 

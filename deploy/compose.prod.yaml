@@ -1,5 +1,6 @@
 services:
   app:
+    # TODO 1. EC2에서 다시 띄울 앱 이미지 이름을 정하세요.
     image: aandi-deployment-runtime-lab:latest
     container_name: aandi-app
     restart: unless-stopped
@@ -11,7 +12,9 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # TODO 2. prod profile이 활성화되도록 환경변수를 연결하세요.
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      # TODO 3. 앱이 필요한 운영 값을 컨테이너 환경변수로 넘기세요.
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -29,6 +32,7 @@ services:
       APP_PASSWORD_RESET_URL: ${APP_PASSWORD_RESET_URL}
 
   mysql:
+    # TODO 4. 운영에서도 MySQL 컨테이너를 함께 올릴지 확인하세요.
     image: mysql:8.4
     container_name: aandi-mysql
     restart: unless-stopped
@@ -50,6 +54,7 @@ services:
       - mysql-data:/var/lib/mysql
 
   redis:
+    # TODO 5. Redis도 같이 띄워야 현재 앱 기능이 깨지지 않습니다.
     image: redis:7.4
     container_name: aandi-redis
     restart: unless-stopped

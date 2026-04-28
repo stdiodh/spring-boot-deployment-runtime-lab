@@ -30,53 +30,23 @@ jobs:
 
       - name: Prepare release bundle
         run: |
-          rm -rf release
-          mkdir -p release/build/libs
-          cp build/libs/*.jar release/build/libs/app.jar
-          cp Dockerfile release/Dockerfile
-          cp .env.example release/.env.example
-          cp -R deploy release/deploy
+          # TODO 1. build/libs 아래 jar를 release 폴더로 복사하세요.
+          # TODO 2. Dockerfile, compose 파일, env 예시도 함께 올릴 수 있게 묶으세요.
+          echo "TODO: release bundle을 준비하세요."
 
       - name: Write SSH key
         run: |
-          mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/aandi-ec2.pem
-          chmod 600 ~/.ssh/aandi-ec2.pem
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+          # TODO 3. GitHub Secrets의 EC2_SSH_KEY를 파일로 복원하세요.
+          # TODO 4. 권한을 600으로 맞추고 known_hosts도 준비하세요.
+          echo "TODO: SSH key를 준비하세요."
 
       - name: Upload release bundle
         run: |
-          ssh -i ~/.ssh/aandi-ec2.pem "${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}" "mkdir -p ${RELEASE_DIR}"
-          scp -i ~/.ssh/aandi-ec2.pem -r release/* "${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:${RELEASE_DIR}/"
+          # TODO 5. EC2 release 디렉터리를 만들고 파일을 업로드하세요.
+          echo "TODO: release bundle을 EC2로 업로드하세요."
 
       - name: Deploy on EC2
         run: |
-          ssh -i ~/.ssh/aandi-ec2.pem "${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}" <<EOF
-            set -e
-            cd ${RELEASE_DIR}
-            cat > .env <<ENV
-            SPRING_PROFILES_ACTIVE=prod
-            DB_URL=${{ secrets.PROD_DB_URL }}
-            DB_USERNAME=${{ secrets.PROD_DB_USERNAME }}
-            DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}
-            REDIS_HOST=${{ secrets.PROD_REDIS_HOST }}
-            REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
-            JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
-            JWT_EXPIRATION_MS=${{ secrets.PROD_JWT_EXPIRATION_MS }}
-            MAIL_HOST=${{ secrets.PROD_MAIL_HOST }}
-            MAIL_PORT=${{ secrets.PROD_MAIL_PORT }}
-            MAIL_USERNAME=${{ secrets.PROD_MAIL_USERNAME }}
-            MAIL_PASSWORD=${{ secrets.PROD_MAIL_PASSWORD }}
-            GOOGLE_CLIENT_ID=${{ secrets.PROD_GOOGLE_CLIENT_ID }}
-            GOOGLE_CLIENT_SECRET=${{ secrets.PROD_GOOGLE_CLIENT_SECRET }}
-            APP_FRONTEND_URL=${{ secrets.PROD_FRONTEND_URL }}
-            APP_PASSWORD_RESET_URL=${{ secrets.PROD_PASSWORD_RESET_URL }}
-            MYSQL_DATABASE=${{ secrets.PROD_MYSQL_DATABASE }}
-            MYSQL_ROOT_PASSWORD=${{ secrets.PROD_MYSQL_ROOT_PASSWORD }}
-            ENV
-            docker compose -f deploy/compose.prod.yaml down || true
-            docker build -t ${APP_IMAGE} .
-            docker compose --env-file .env -f deploy/compose.prod.yaml up -d
-            docker compose --env-file .env -f deploy/compose.prod.yaml ps
-            docker logs --tail 50 aandi-app
-          EOF
+          # TODO 6. EC2에서 .env 파일을 만들고 운영 시크릿을 채우세요.
+          # TODO 7. docker build -> docker compose up -d -> docker logs 순서로 배포를 마무리하세요.
+          echo "TODO: EC2에서 배포 명령을 실행하세요."
