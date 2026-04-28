@@ -12,6 +12,16 @@
 - 같은 시퀀스 문서 구조를 유지합니다.
 - 배포 흐름이 완성된 코드가 들어 있습니다.
 
+## `10-implementation`
+
+- 학생이 자동화 흐름을 직접 채우는 브랜치입니다.
+- `ci.yml`, `deploy.yml`, `deploy.sh`, `check-deploy.sh`에 TODO가 들어 있습니다.
+
+## `10-answer`
+
+- 자동화 정답 브랜치입니다.
+- build, test, deploy, verify를 workflow와 script로 분리한 완성 코드가 들어 있습니다.
+
 ## `main`
 
 - 이 레포의 안내 브랜치입니다.
@@ -20,5 +30,5 @@
 ## 추천 사용 순서
 
 1. `main`에서 레포 목적 확인
-2. `09-implementation`으로 이동
-3. 실습 완료 후 `09-answer` 비교
+2. 현재 시퀀스에 맞는 `NN-implementation`으로 이동
+3. 실습 완료 후 같은 번호의 `NN-answer` 비교
