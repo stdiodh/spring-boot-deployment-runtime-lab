@@ -1,17 +1,17 @@
-# 배포와 실행 환경
+# 자동화와 운영 흐름
 
-> Docker, EC2, GitHub Actions, Secrets를 이용해 로컬에서 돌아가던 Spring Boot 앱을 운영 환경으로 옮겨보는 실습입니다.
+> GitHub Actions와 배포 스크립트를 이용해 build, test, deploy, verify를 반복 가능하게 묶어보는 실습입니다.
 
 > 이번 시퀀스 한 줄 요약  
-> 이번 실습은 실행 가능한 애플리케이션을 하나의 배포 단위로 묶고, 환경변수와 시크릿을 분리한 뒤, GitHub Actions로 EC2까지 전달해보는 과정입니다.
+> 이번 실습은 한 번 성공시킨 배포를 사람 손이 아니라 workflow와 스크립트가 같은 순서로 다시 실행하게 만드는 과정입니다.
 
 ## 이 레포에서 다루는 것
 
-- Dockerfile로 애플리케이션 패키징하기
-- `application-prod.yaml`로 운영 설정 분리하기
-- GitHub Actions에서 jar를 만들고 EC2로 전달하기
-- GitHub Secrets에 SSH 키와 운영 비밀값 숨기기
-- 컨테이너 로그로 배포 결과 확인하기
+- CI와 CD의 가장 기본적인 구분
+- GitHub Actions에서 build, test, deploy, verify 단계 나누기
+- 배포 명령을 workflow 밖의 스크립트로 분리하기
+- GitHub Secrets를 계속 안전하게 유지하기
+- 배포 후 확인 단계까지 자동화에 포함하기
 
 ## 문서
 
@@ -23,30 +23,31 @@
 
 ## 학생이 직접 구현하는 핵심 파일
 
-- [`Dockerfile`](./Dockerfile)
-- [`src/main/resources/application-prod.yaml`](./src/main/resources/application-prod.yaml)
-- [`deploy/compose.prod.yaml`](./deploy/compose.prod.yaml)
 - [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml)
+- [`.github/workflows/ci.yml`](./.github/workflows/ci.yml)
+- [`scripts/deploy.sh`](./scripts/deploy.sh)
+- [`scripts/check-deploy.sh`](./scripts/check-deploy.sh)
 
-## 실행 흐름 요약
+이 브랜치는 `10-implementation` starter입니다.  
+핵심 파일에는 TODO가 들어 있고, 정답 비교는 `10-answer` 브랜치에서 합니다.
 
-1. `./gradlew test bootJar`로 애플리케이션 jar를 만듭니다.
-2. `Dockerfile`로 앱 이미지를 만듭니다.
-3. `application-prod.yaml`과 `.env`로 운영 설정을 분리합니다.
-4. GitHub Actions가 jar와 배포 파일을 EC2로 전달합니다.
-5. EC2에서 `docker compose`로 컨테이너를 다시 띄우고 로그를 확인합니다.
+## 자동화 흐름 요약
+
+1. 코드가 변경되면 workflow가 시작됩니다.
+2. workflow가 `build`와 `test`를 실행합니다.
+3. 빌드 산출물과 배포 파일을 묶어 서버로 전달합니다.
+4. 서버에서 배포 스크립트가 새 버전을 다시 띄웁니다.
+5. 마지막에 확인 스크립트가 컨테이너 상태와 HTTP 응답을 점검합니다.
 
 ## 로컬 확인
 
 ```bash
-docker compose up -d
-./gradlew test
-./gradlew bootRun
+./gradlew test bootJar
+bash scripts/check-deploy.sh
 ```
 
-## 운영 배포 흐름
+## 운영 확인
 
-1. GitHub Secrets에 EC2 접속 정보와 운영 비밀값을 넣습니다.
-2. GitHub Actions에서 `deploy.yml`을 실행합니다.
-3. EC2에 업로드된 jar, `Dockerfile`, `compose.prod.yaml`로 운영 컨테이너를 다시 띄웁니다.
-4. 마지막에 `docker logs`로 애플리케이션 로그를 확인합니다.
+1. GitHub Actions `CI`가 build/test를 통과하는지 봅니다.
+2. `Deploy to EC2`가 artifact 업로드와 원격 배포를 끝내는지 봅니다.
+3. verify 단계에서 `docker compose ps`, `docker logs`, HTTP 응답 확인까지 통과하는지 봅니다.

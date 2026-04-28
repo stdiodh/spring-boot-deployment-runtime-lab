@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - 10-implementation
+      - 10-answer
+  push:
+    branches:
+      - 10-implementation
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Grant Gradle permission
+        run: chmod +x gradlew
+
+      - name: Run build and test
+        run: |
+          # TODO 1. build와 test를 한 번에 실행하는 Gradle 명령을 채우세요.
+          # TODO 2. deploy 전에 깨진 코드를 먼저 걸러내는 흐름이라는 점을 같이 떠올리세요.
+          echo "TODO: build and test step을 채우세요."

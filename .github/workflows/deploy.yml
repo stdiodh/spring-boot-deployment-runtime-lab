@@ -4,14 +4,11 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 09-answer
+      - 10-answer
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    env:
-      RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab
-      APP_IMAGE: aandi-deployment-runtime-lab:latest
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -26,16 +23,29 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run tests and build jar
-        run: ./gradlew test bootJar
+        run: |
+          # TODO 1. release bundle을 만들기 전에 test와 bootJar를 실행하세요.
+          echo "TODO: test and bootJar step을 채우세요."
 
       - name: Prepare release bundle
         run: |
-          rm -rf release
-          mkdir -p release/build/libs
-          cp build/libs/*.jar release/build/libs/app.jar
-          cp Dockerfile release/Dockerfile
-          cp .env.example release/.env.example
-          cp -R deploy release/deploy
+          # TODO 2. jar, Dockerfile, env 예시, deploy 디렉터리, scripts 디렉터리를 release에 모으세요.
+          echo "TODO: release bundle을 준비하세요."
+
+      - name: Upload release artifact
+        # TODO 3. release 디렉터리를 artifact로 업로드하세요.
+        run: echo "TODO: upload artifact step을 채우세요."
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab
+      APP_IMAGE: aandi-deployment-runtime-lab:latest
+    steps:
+      - name: Download release artifact
+        # TODO 4. build job이 올린 artifact를 다시 내려받으세요.
+        run: echo "TODO: download artifact step을 채우세요."
 
       - name: Write SSH key
         run: |
@@ -46,37 +56,30 @@ jobs:
 
       - name: Upload release bundle
         run: |
-          ssh -i ~/.ssh/aandi-ec2.pem "${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}" "mkdir -p ${RELEASE_DIR}"
-          scp -i ~/.ssh/aandi-ec2.pem -r release/* "${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:${RELEASE_DIR}/"
+          # TODO 5. EC2 release 디렉터리를 만들고 release 파일을 업로드하세요.
+          echo "TODO: upload release bundle step을 채우세요."
 
       - name: Deploy on EC2
         run: |
-          ssh -i ~/.ssh/aandi-ec2.pem "${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}" <<EOF
-            set -e
-            cd ${RELEASE_DIR}
-            cat > .env <<ENV
-            SPRING_PROFILES_ACTIVE=prod
-            DB_URL=${{ secrets.PROD_DB_URL }}
-            DB_USERNAME=${{ secrets.PROD_DB_USERNAME }}
-            DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}
-            REDIS_HOST=${{ secrets.PROD_REDIS_HOST }}
-            REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
-            JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
-            JWT_EXPIRATION_MS=${{ secrets.PROD_JWT_EXPIRATION_MS }}
-            MAIL_HOST=${{ secrets.PROD_MAIL_HOST }}
-            MAIL_PORT=${{ secrets.PROD_MAIL_PORT }}
-            MAIL_USERNAME=${{ secrets.PROD_MAIL_USERNAME }}
-            MAIL_PASSWORD=${{ secrets.PROD_MAIL_PASSWORD }}
-            GOOGLE_CLIENT_ID=${{ secrets.PROD_GOOGLE_CLIENT_ID }}
-            GOOGLE_CLIENT_SECRET=${{ secrets.PROD_GOOGLE_CLIENT_SECRET }}
-            APP_FRONTEND_URL=${{ secrets.PROD_FRONTEND_URL }}
-            APP_PASSWORD_RESET_URL=${{ secrets.PROD_PASSWORD_RESET_URL }}
-            MYSQL_DATABASE=${{ secrets.PROD_MYSQL_DATABASE }}
-            MYSQL_ROOT_PASSWORD=${{ secrets.PROD_MYSQL_ROOT_PASSWORD }}
-            ENV
-            docker compose -f deploy/compose.prod.yaml down || true
-            docker build -t ${APP_IMAGE} .
-            docker compose --env-file .env -f deploy/compose.prod.yaml up -d
-            docker compose --env-file .env -f deploy/compose.prod.yaml ps
-            docker logs --tail 50 aandi-app
-          EOF
+          # TODO 6. EC2에 접속해서 .env를 만들고 deploy.sh를 실행하세요.
+          # TODO 7. secret 값을 workflow에 직접 적지 말고 GitHub Secrets를 참조하세요.
+          echo "TODO: deploy on EC2 step을 채우세요."
+
+  verify:
+    runs-on: ubuntu-latest
+    needs: deploy
+    env:
+      RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab
+    steps:
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/aandi-ec2.pem
+          chmod 600 ~/.ssh/aandi-ec2.pem
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Verify deployment on EC2
+        run: |
+          # TODO 8. EC2에서 check-deploy.sh를 실행하세요.
+          # TODO 9. 배포 뒤 상태 확인도 자동화의 일부라는 점을 잊지 마세요.
+          echo "TODO: verify step을 채우세요."
