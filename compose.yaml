@@ -1,0 +1,28 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: aandi-mysql
+    environment:
+      MYSQL_DATABASE: aandi_lab
+      MYSQL_ROOT_PASSWORD: root
+      TZ: Asia/Seoul
+    ports:
+      - "3306:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+  redis:
+    image: redis:7.4
+    container_name: aandi-redis
+    ports:
+      - "6379:6379"
+    command:
+      - redis-server
+      - --save
+      - "60"
+      - "1"
+
+volumes:
+  mysql-data:

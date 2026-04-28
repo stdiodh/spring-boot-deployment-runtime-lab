@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A&I Auth Demo</title>
+  <style>
+    :root {
+      --bg: linear-gradient(135deg, #f6efe5 0%, #e8f4ec 45%, #d8ebff 100%);
+      --card: rgba(255, 252, 247, 0.84);
+      --ink: #1f2a37;
+      --muted: #5f6b76;
+      --line: rgba(31, 42, 55, 0.12);
+      --accent: #0f766e;
+      --accent-strong: #0b5f59;
+      --warm: #b45309;
+      --shadow: 0 18px 45px rgba(31, 42, 55, 0.12);
+      --radius: 24px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Pretendard", "SUIT", "Noto Sans KR", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 18px;
+    }
+
+    .shell {
+      width: min(1080px, 100%);
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 24px;
+    }
+
+    .panel, .hero {
+      background: var(--card);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 36px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -80px;
+      top: -80px;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(180, 83, 9, 0.25), rgba(180, 83, 9, 0));
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(15, 118, 110, 0.1);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 18px 0 10px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.05;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .hero-list {
+      margin-top: 28px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .hero-item {
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.52);
+      border: 1px solid var(--line);
+    }
+
+    .hero-item strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .panel {
+      padding: 28px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .section {
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.48);
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 1.1rem;
+    }
+
+    .section p {
+      margin-bottom: 14px;
+      font-size: 0.95rem;
+    }
+
+    form {
+      display: grid;
+      gap: 10px;
+    }
+
+    input, button {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      padding: 13px 14px;
+      font-size: 0.97rem;
+      font: inherit;
+    }
+
+    input {
+      background: rgba(255, 255, 255, 0.86);
+    }
+
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+      border: none;
+      transition: transform 120ms ease, background 120ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      background: var(--accent-strong);
+    }
+
+    .ghost {
+      background: white;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+
+    .status {
+      min-height: 72px;
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(15, 118, 110, 0.08);
+      border: 1px dashed rgba(15, 118, 110, 0.25);
+      color: var(--ink);
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.93rem;
+    }
+
+    .hint {
+      font-size: 0.88rem;
+      color: var(--warm);
+    }
+
+    @media (max-width: 900px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <span class="eyebrow">A&I Backend Lab</span>
+      <h1>Local Auth, OAuth, SMTP 흐름을 한 화면에서 확인해보세요.</h1>
+      <p>이 페이지는 실습용 간단 프론트입니다. 로컬 회원가입/로그인, Google OAuth 로그인, 비밀번호 재설정 메일 요청까지 한 번에 확인할 수 있습니다.</p>
+      <div class="hero-list">
+        <div class="hero-item">
+          <strong>Step 04</strong>
+          로컬 회원가입 -> 로그인 -> `/auth/me` 확인
+        </div>
+        <div class="hero-item">
+          <strong>Step 05</strong>
+          OAuth 로그인 성공 후 사용자 연결 -> JWT 또는 프론트 redirect 처리
+        </div>
+        <div class="hero-item">
+          <strong>Next Idea</strong>
+          SMTP로 비밀번호 재설정 메일 요청을 보내는 계정 복구 흐름
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section">
+        <h2>회원가입</h2>
+        <form id="signup-form">
+          <input id="signup-email" type="email" placeholder="email@example.com" required>
+          <input id="signup-password" type="password" placeholder="password" required>
+          <button type="submit">로컬 회원가입</button>
+        </form>
+      </div>
+
+      <div class="section">
+        <h2>로그인</h2>
+        <form id="login-form">
+          <input id="login-email" type="email" placeholder="email@example.com" required>
+          <input id="login-password" type="password" placeholder="password" required>
+          <button type="submit">JWT 로그인</button>
+        </form>
+      </div>
+
+      <div class="section">
+        <h2>OAuth 준비</h2>
+        <p>OAuth provider 설정이 들어오면 아래 버튼으로 외부 로그인 흐름을 바로 확인할 수 있습니다.</p>
+        <button class="ghost" id="oauth-google" type="button">Google OAuth 시작</button>
+        <p class="hint">실습 준비 전에는 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` 값을 채워야 합니다.</p>
+        <p class="hint">흐름: Google 로그인 -> Google이 사용자 정보 반환 -> 우리 서버가 User 연결 -> JWT 발급 -> 이 페이지로 redirect</p>
+      </div>
+
+      <div class="section">
+        <h2>비밀번호 재설정 메일 요청</h2>
+        <form id="password-reset-form">
+          <input id="password-reset-email" type="email" placeholder="email@example.com" required>
+          <button class="ghost" type="submit">SMTP 메일 요청</button>
+        </form>
+        <p class="hint">실습 준비 전에는 `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD` 값을 채워야 합니다.</p>
+        <p class="hint">흐름: email 입력 -> reset 링크 생성 -> SMTP 메일 발송</p>
+      </div>
+
+      <div class="section">
+        <h2>현재 로그인 상태</h2>
+        <button class="ghost" id="me-button" type="button">/auth/me 호출</button>
+        <div id="status" class="status">아직 요청 기록이 없습니다.</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const statusBox = document.getElementById("status");
+    const query = new URLSearchParams(window.location.search);
+    let accessToken = query.get("token") || "";
+
+    function printStatus(title, payload) {
+      const rendered = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+      statusBox.textContent = `${title}\n${rendered}`;
+    }
+
+    async function request(url, options = {}) {
+      const response = await fetch(url, options);
+      const raw = await response.text();
+      let body = raw;
+
+      try {
+        body = raw ? JSON.parse(raw) : {};
+      } catch (_) {
+      }
+
+      if (!response.ok) {
+        throw { status: response.status, body };
+      }
+
+      return body;
+    }
+
+    document.getElementById("signup-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      try {
+        const body = await request("/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: document.getElementById("signup-email").value,
+            password: document.getElementById("signup-password").value
+          })
+        });
+        printStatus("회원가입 성공", body || "201 Created");
+      } catch (error) {
+        printStatus("회원가입 실패", error.body || error);
+      }
+    });
+
+    document.getElementById("login-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      try {
+        const body = await request("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: document.getElementById("login-email").value,
+            password: document.getElementById("login-password").value
+          })
+        });
+        accessToken = body.accessToken || "";
+        printStatus("로그인 성공", body);
+      } catch (error) {
+        printStatus("로그인 실패", error.body || error);
+      }
+    });
+
+    document.getElementById("me-button").addEventListener("click", async () => {
+      try {
+        const headers = accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+        const body = await request("/auth/me", { headers });
+        printStatus("/auth/me 성공", body);
+      } catch (error) {
+        printStatus("/auth/me 실패", error.body || error);
+      }
+    });
+
+    document.getElementById("oauth-google").addEventListener("click", () => {
+      window.location.href = "/oauth2/authorization/google";
+    });
+
+    document.getElementById("password-reset-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const email = document.getElementById("password-reset-email").value;
+
+      const response = await fetch("/account-recovery/password-reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ email })
+      });
+
+      if (response.ok) {
+        printStatus("비밀번호 재설정 메일 요청", {
+          email,
+          status: response.status,
+          message: "SMTP 메일 요청이 접수되었습니다."
+        });
+        return;
+      }
+
+      const error = await response.json().catch(() => ({ message: "메일 요청에 실패했습니다." }));
+      printStatus("비밀번호 재설정 메일 요청 실패", error);
+    });
+
+    if (query.get("oauth") === "success") {
+      printStatus("OAuth 로그인 성공", {
+        provider: query.get("provider"),
+        email: query.get("email"),
+        isNewUser: query.get("isNewUser"),
+        accessToken
+      });
+    } else if (accessToken) {
+      printStatus("OAuth 또는 로그인 토큰 감지", { accessToken });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A&I Realtime Demo</title>
+  <style>
+    body {
+      font-family: "Pretendard", "Apple SD Gothic Neo", sans-serif;
+      max-width: 720px;
+      margin: 40px auto;
+      padding: 0 16px 40px;
+      line-height: 1.5;
+      color: #172033;
+      background: linear-gradient(180deg, #f7fafc 0%, #eef4ff 100%);
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #d9e4f2;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 12px 24px rgba(23, 32, 51, 0.06);
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin-bottom: 8px;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    input {
+      flex: 1;
+      min-width: 220px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #c9d6e8;
+    }
+    button {
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 10px;
+      background: #2457f5;
+      color: white;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #6c7b95;
+    }
+    #messages, #status {
+      min-height: 140px;
+      white-space: pre-wrap;
+      background: #0f172a;
+      color: #d8f5ff;
+      padding: 14px;
+      border-radius: 12px;
+      font-family: "SFMono-Regular", ui-monospace, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>실시간 통신 데모</h1>
+    <p>Connect 후 메시지를 보내면, 서버가 topic으로 다시 보내는 흐름을 바로 확인할 수 있습니다.</p>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button id="connectBtn">Connect</button>
+      <button id="disconnectBtn" class="secondary">Disconnect</button>
+    </div>
+    <div id="status">연결 전</div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <input id="senderInput" placeholder="보내는 사람" value="andi">
+      <input id="contentInput" placeholder="메시지 내용" value="실시간 테스트">
+    </div>
+    <div class="row">
+      <button id="sendBtn">Send</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>수신 로그</h2>
+    <div id="messages"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+  <script>
+    let stompClient = null;
+    const statusBox = document.getElementById("status");
+    const messagesBox = document.getElementById("messages");
+
+    function appendStatus(text) {
+      statusBox.textContent += "\n" + text;
+    }
+
+    function appendMessage(text) {
+      messagesBox.textContent += (messagesBox.textContent ? "\n" : "") + text;
+    }
+
+    function connect() {
+      const socket = new SockJS("/ws-chat");
+      stompClient = StompJs.Stomp.over(socket);
+      stompClient.debug = () => {};
+      stompClient.connect({}, () => {
+        statusBox.textContent = "연결 완료";
+        appendStatus("topic 구독 시작: /topic/chat");
+        stompClient.subscribe("/topic/chat", (frame) => {
+          const message = JSON.parse(frame.body);
+          appendMessage(`${message.sender}: ${message.content}`);
+        });
+      }, (error) => {
+        appendStatus("연결 실패: " + error);
+      });
+    }
+
+    function disconnect() {
+      if (stompClient) {
+        stompClient.disconnect(() => {
+          appendStatus("연결 종료");
+        });
+      }
+    }
+
+    function sendMessage() {
+      if (!stompClient || !stompClient.connected) {
+        appendStatus("먼저 Connect 하세요.");
+        return;
+      }
+
+      const payload = {
+        sender: document.getElementById("senderInput").value,
+        content: document.getElementById("contentInput").value
+      };
+
+      appendStatus("전송: " + JSON.stringify(payload));
+      stompClient.send("/app/chat.send", {}, JSON.stringify(payload));
+    }
+
+    document.getElementById("connectBtn").addEventListener("click", connect);
+    document.getElementById("disconnectBtn").addEventListener("click", disconnect);
+    document.getElementById("sendBtn").addEventListener("click", sendMessage);
+  </script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: spring-boot-deployment-runtime-lab
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/aandi_lab?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:demo@example.com}
+    password: ${MAIL_PASSWORD:demo-password}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    defer-datasource-initialization: true
+    open-in-view: false
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:demo-google-client-id}
+            client-secret: ${GOOGLE_CLIENT_SECRET:demo-google-client-secret}
+            scope:
+              - profile
+              - email
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+springdoc:
+  swagger-ui:
+    path: /swagger
+    operations-sorter: method
+  default-produces-media-type: application/json
+
+jwt:
+  secret: ${JWT_SECRET:change-this-secret-for-sequence-09-change-this-secret}
+  expiration-ms: 3600000
+
+app:
+  frontend-url: ${APP_FRONTEND_URL:http://localhost:8080/realtime-demo.html}
+  password-reset-url: ${APP_PASSWORD_RESET_URL:http://localhost:8080/auth-demo.html}
+
+cache:
+  post-ttl-seconds: 60
