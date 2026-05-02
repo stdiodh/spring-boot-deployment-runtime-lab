@@ -12,6 +12,7 @@
 - GitHub Actions에서 jar를 만들고 EC2로 전달하기
 - GitHub Secrets에 SSH 키와 운영 비밀값 숨기기
 - 컨테이너 로그로 배포 결과 확인하기
+- 환경변수 우선순위와 시크릿 관리 기준 이해하기
 
 ## 문서
 
@@ -38,6 +39,7 @@
 3. `application-prod.yaml`과 `.env`로 운영 설정을 분리합니다.
 4. GitHub Actions가 jar와 배포 파일을 EC2로 전달합니다.
 5. EC2에서 `docker compose`로 컨테이너를 다시 띄우고 로그를 확인합니다.
+6. 어떤 값은 `.env`에 두고 어떤 값은 GitHub Secrets에 둘지 구분합니다.
 
 ## 로컬 확인
 
