@@ -17,6 +17,7 @@
 - GitHub Actions로 기본 배포 흐름 만들기
 - GitHub Secrets로 EC2 pem key, 계정, 시크릿 분리하기
 - 배포 후 로그로 기동 상태 확인하기
+- 환경변수 우선순위와 운영 설정 분리 감각 익히기
 - build, test, deploy, verify 자동화 흐름 분리하기
 - workflow와 배포 스크립트 역할 나누기
 
