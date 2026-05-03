@@ -1,9 +1,9 @@
 # 배포와 실행 환경
 
-> Docker, EC2, GitHub Actions, Secrets를 이용해 로컬에서 돌아가던 Spring Boot 앱을 운영 환경으로 옮겨보는 실습입니다.
+Docker, EC2, GitHub Actions, Secrets를 이용해 로컬에서 돌아가던 Spring Boot 앱을 운영 환경으로 옮겨보는 실습입니다.
 
-> 이번 시퀀스 한 줄 요약  
-> 이번 실습은 실행 가능한 애플리케이션을 하나의 배포 단위로 묶고, 환경변수와 시크릿을 분리한 뒤, GitHub Actions로 EC2까지 전달해보는 과정입니다.
+이번 시퀀스 한 줄 요약  
+이번 실습은 실행 가능한 애플리케이션을 하나의 배포 단위로 묶고, 환경변수와 시크릿을 분리한 뒤, GitHub Actions로 EC2까지 전달해보는 과정입니다.
 
 ## 이 레포에서 다루는 것
 
