@@ -5,7 +5,7 @@
 09에서는 배포를 한 번 성공시키는 경험이 중요했습니다.
 10에서는 그 배포를 같은 순서로 반복하게 만드는 자동화가 핵심입니다.
 
-## 학생이 완성할 최종 흐름
+## 실습에서 완성할 최종 흐름
 
 1. `ci.yml`이 build와 test를 자동으로 실행합니다.
 2. `deploy.yml`이 artifact와 배포 단계를 연결합니다.
@@ -18,7 +18,7 @@
 1. 왜 build/test가 실패하면 deploy로 넘어가면 안 되는가
 2. 왜 verify가 자동화 끝의 선택사항이 아니라 필수 단계인가
 
-## 학생이 직접 구현할 순서
+## 실습자가 직접 구현할 순서
 
 1. workflow 파일 구조를 읽습니다.
 2. build step을 채웁니다.
@@ -66,7 +66,7 @@
 - `./gradlew bootJar`까지 연결합니다.
 - release bundle에 어떤 파일이 들어가야 하는지 확인합니다.
 - 배포 전에 실행 가능한 산출물이 준비되어야 합니다.
-- starter에서는 일부 step이 `echo TODO...` 상태라서, 어떤 파일을 release bundle에 넣을지 학생이 직접 채워야 합니다.
+- starter에서는 일부 step이 `echo TODO...` 상태라서, 어떤 파일을 release bundle에 넣을지 실습자가 직접 채워야 합니다.
 
 ### 3. test step을 채웁니다
 
@@ -83,7 +83,7 @@
 - 서버에서는 workflow 안에 긴 명령을 직접 적기보다 `deploy.sh`로 분리합니다.
 - starter에서는 workflow와 script 둘 다 핵심 명령이 비워져 있으므로, 두 파일을 함께 보면서 연결해야 합니다.
 
-이 단계에서 학생이 같이 이해해야 하는 문장:
+이 단계에서 실습자가 같이 이해해야 하는 문장:
 
 - "workflow는 배포를 지시하고, deploy.sh는 서버에서 실제 배포를 수행한다."
 - "배포 로직이 길어질수록 workflow와 script를 나누는 편이 유지보수에 유리하다."
@@ -113,7 +113,7 @@ bash scripts/check-deploy.sh
 1. `CI` workflow가 build/test를 통과하는지 확인합니다.
 2. `Deploy to EC2` workflow가 artifact, deploy, verify를 끝내는지 확인합니다.
 
-## 학생 체크 질문
+## 실습자 체크 질문
 
 - build와 test 중 어떤 것이 먼저 와야 할까요?
 - deploy를 workflow 안에 다 적지 않고 script로 뺀 이유는 무엇인가요?
@@ -121,7 +121,7 @@ bash scripts/check-deploy.sh
 - CI와 CD를 이번 실습 기준으로 어떻게 설명할 수 있나요?
 - 실패 차단 지점이 없으면 어떤 사고가 생길 수 있을까요?
 
-## 강사 / PPT 체크 질문
+## 리뷰어 / PPT 체크 질문
 
 - build → test → deploy → verify 흐름 그림이 있는가
 - 수동 배포와 자동 배포 차이를 예시로 설명할 수 있는가

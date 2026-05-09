@@ -2,7 +2,7 @@
 
 GitHub Actions와 배포 스크립트를 이용해 build, test, deploy, verify를 반복 가능하게 묶어보는 실습입니다.
 
-이번 시퀀스 한 줄 요약  
+이번 시퀀스 한 줄 요약
 이번 실습은 한 번 성공시킨 배포를 사람 손이 아니라 workflow와 스크립트가 같은 순서로 다시 실행하게 만드는 과정입니다.
 
 ## 이 레포에서 다루는 것
@@ -18,19 +18,19 @@ GitHub Actions와 배포 스크립트를 이용해 build, test, deploy, verify�
 
 - [이론 문서](./docs/theory.md)
 - [구현 문서](./docs/implementation.md)
-- [정답 가이드](./docs/answer-guide.md)
+- [참고 구현 가이드](./docs/answer-guide.md)
 - [체크리스트](./docs/checklist.md)
 - [제공 자산 정리](./docs/assets.md)
 
-## 학생이 직접 구현하는 핵심 파일
+## 실습에서 직접 구현하는 핵심 파일
 
 - [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml)
 - [`.github/workflows/ci.yml`](./.github/workflows/ci.yml)
 - [`scripts/deploy.sh`](./scripts/deploy.sh)
 - [`scripts/check-deploy.sh`](./scripts/check-deploy.sh)
 
-이 브랜치는 `10-implementation` starter입니다.  
-핵심 파일에는 TODO가 들어 있고, 정답 비교는 `10-answer` 브랜치에서 합니다.
+이 브랜치는 `10-implementation` starter입니다.
+핵심 파일에는 TODO가 들어 있고, 참고 구현 비교는 `10-answer` 브랜치에서 합니다.
 
 ## 자동화 흐름 요약
 

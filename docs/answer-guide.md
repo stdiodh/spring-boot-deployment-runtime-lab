@@ -1,9 +1,9 @@
-# 자동화와 운영 흐름 정답 비교 가이드
+# 자동화와 운영 흐름 참고 구현 비교 가이드
 
-이 브랜치는 starter이므로 정답 코드를 그대로 싣지 않습니다.
-완성된 비교 기준은 `10-answer` 브랜치에서 확인합니다.
+이 브랜치는 starter이므로 참고 구현를 그대로 싣지 않습니다.
+완성된 흐름은 `10-answer` 브랜치에서 확인합니다.
 
-## 정답 브랜치에서 꼭 비교할 파일
+## 참고 구현 브랜치에서 꼭 비교할 파일
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/deploy.yml`
@@ -25,7 +25,7 @@
 
 ### 1. test를 통과하지 못한 결과가 deploy로 넘어가지 않는가
 
-정답 브랜치의 `ci.yml`은 최소한 아래 감각이 보여야 합니다.
+참고 구현 브랜치의 `ci.yml`은 최소한 아래 감각이 보여야 합니다.
 
 ```yaml
 - name: Run build and test
@@ -37,7 +37,7 @@
 
 ### 2. workflow 안에 모든 서버 명령을 다 적지 않는가
 
-정답 브랜치에서는 배포 로직이 아래처럼 script로 빠져야 합니다.
+참고 구현 브랜치에서는 배포 로직이 아래처럼 script로 빠져야 합니다.
 
 ```yaml
 - name: Deploy on EC2
@@ -53,7 +53,7 @@
 
 ### 3. verify가 배포 뒤의 별도 단계로 살아 있는가
 
-정답 브랜치의 `check-deploy.sh`에서는 아래 흐름이 보여야 합니다.
+참고 구현 브랜치의 `check-deploy.sh`에서는 아래 흐름이 보여야 합니다.
 
 ```bash
 docker compose --env-file .env -f deploy/compose.prod.yaml ps
@@ -69,7 +69,7 @@ curl --fail --silent http://localhost:8080/ >/dev/null
 
 즉, 배포 성공 여부를 명령 종료가 아니라 실행 결과로 판단하고 있는가를 봐야 합니다.
 
-## 강사가 빠르게 볼 체크 포인트
+## 리뷰어가 빠르게 볼 체크 포인트
 
 - `ci.yml`이 build/test를 자동으로 실행하는가
 - `deploy.yml`이 artifact 업로드와 deploy/verify 순서를 분명히 보여주는가
@@ -77,13 +77,13 @@ curl --fail --silent http://localhost:8080/ >/dev/null
 - `check-deploy.sh`가 상태, 로그, 응답을 모두 확인하는가
 - 실패한 단계가 다음 단계로 넘어가지 않게 설계되어 있는가
 
-## 학생이 자주 놓치는 부분
+## 실습자가 자주 놓치는 부분
 
 - build만 되고 test는 비워둔 경우
 - verify를 배포 뒤의 선택사항으로 오해하는 경우
 - workflow 안에 모든 명령을 길게 적는 경우
 - Secrets 참조 대신 값을 직접 적어버리는 경우
 
-정답 비교에서 가장 중요한 질문은 이것입니다.
+참고 구현 비교에서 가장 중요한 질문은 이것입니다.
 
 "이 자동화는 어디에서 멈춰야 하고, 어디에서 성공이라고 말할 수 있는가?"
