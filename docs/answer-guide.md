@@ -1,8 +1,8 @@
-# 배포와 실행 환경 정답 가이드
+# 배포와 실행 환경 참고 구현 가이드
 
-## 정답 흐름 요약
+## 참고 구현 흐름 요약
 
-정답 기준에서는 아래 네 파일이 핵심입니다.
+참고 기준에서는 아래 네 파일이 핵심입니다.
 
 - `Dockerfile`
 - `src/main/resources/application-prod.yaml`
@@ -12,7 +12,7 @@
 이 네 파일이 함께 맞물려야
 로컬 jar 빌드 -> EC2 업로드 -> 컨테이너 재기동 -> 로그 확인 흐름이 완성됩니다.
 
-## 1. Dockerfile 정답
+## 1. Dockerfile 참고 구현
 
 ```dockerfile
 FROM eclipse-temurin:21-jre
@@ -35,7 +35,7 @@ ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 이번 단계에서는 이미지 최적화보다
 "jar를 컨테이너 안에서 실행한다"는 개념이 먼저입니다.
 
-## 2. application-prod.yaml 정답
+## 2. application-prod.yaml 참고 구현
 
 ```yaml
 spring:
@@ -64,7 +64,7 @@ jwt:
 여기서 먼저 봐야 할 것은
 "어떤 값이 들어갔는가"보다 "어떤 값이 파일에 직접 들어가지 않았는가"입니다.
 
-## 3. compose.prod.yaml 정답 포인트
+## 3. compose.prod.yaml 참고 구현 포인트
 
 ```yaml
 services:
@@ -77,14 +77,14 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
 ```
 
-여기서 학생이 꼭 봐야 할 점은 아래입니다.
+여기서 실습자가 꼭 봐야 할 점은 아래입니다.
 
 - 운영 profile이 `prod`로 들어간다
 - 앱 컨테이너가 `.env` 값을 전달받는다
 - MySQL과 Redis가 함께 뜬다
 - 마지막에는 앱 로그를 확인할 수 있는 상태가 된다
 
-## 4. GitHub Actions 정답 포인트
+## 4. GitHub Actions 참고 구현 포인트
 
 ### 테스트와 jar 빌드
 
@@ -130,7 +130,7 @@ CI 환경에서만 잠깐 복원해 쓰는 것입니다.
 
 ## 5. 환경변수 우선순위 관점에서 꼭 봐야 하는 것
 
-정답 기준에서는 아래 감각이 잡혀야 합니다.
+참고 기준에서는 아래 감각이 잡혀야 합니다.
 
 - `application-prod.yaml`은 자리만 정의한다
 - `.env`는 운영 compose가 읽는 실제 실행 값이 된다
@@ -162,7 +162,7 @@ CI 환경에서만 잠깐 복원해 쓰는 것입니다.
 - `PROD_MYSQL_DATABASE`
 - `PROD_MYSQL_ROOT_PASSWORD`
 
-## 7. 강사가 빠르게 비교할 체크 포인트
+## 7. 리뷰어가 빠르게 비교할 체크 포인트
 
 - `Dockerfile`이 jar를 복사하고 실행하는가
 - `application-prod.yaml`이 운영값을 환경변수로 받는가

@@ -6,7 +6,7 @@
 이번에는 그 앱을 실행 환경으로 옮기는 것을 다룹니다.
 즉, 동작하는 코드를 운영 환경에서도 다시 실행할 수 있게 만드는 과정입니다.
 
-## 학생이 완성할 최종 흐름
+## 실습에서 완성할 최종 흐름
 
 1. `Dockerfile`로 앱 jar를 컨테이너 실행 단위로 묶습니다.
 2. `application-prod.yaml`로 운영 설정을 분리합니다.
@@ -19,7 +19,7 @@
 1. 왜 운영 비밀값은 설정 파일이 아니라 환경변수와 Secrets로 가야 하는가
 2. 왜 배포 마지막 확인은 “명령 성공”이 아니라 “로그 확인”이어야 하는가
 
-## 학생이 직접 구현할 순서
+## 실습자가 직접 구현할 순서
 
 1. `Dockerfile`에서 jar 복사 경로와 실행 명령을 채웁니다.
 2. `application-prod.yaml`에서 운영 환경변수 자리를 채웁니다.
@@ -77,7 +77,7 @@
 - 앱이 MySQL, Redis와 연결될 수 있도록 환경변수를 전달합니다.
 - 운영 compose는 실행 확인용 최소 구성으로 유지합니다.
 
-여기서 학생이 같이 떠올려야 하는 질문:
+여기서 실습자가 같이 떠올려야 하는 질문:
 
 - "운영 환경에서 어떤 값은 compose가 넘기고, 어떤 값은 Secrets가 만들까?"
 - "환경변수 우선순위는 어디서 결정될까?"
@@ -88,7 +88,7 @@
 - 만들어진 jar와 `Dockerfile`, `deploy/compose.prod.yaml`을 EC2로 올립니다.
 - EC2 안에서 `.env`를 만들고 `docker compose up -d`를 다시 실행합니다.
 - SSH 키, DB 비밀번호, OAuth 시크릿은 모두 GitHub Secrets에서 받습니다.
-- starter에서는 `deploy.yml`이 `echo TODO...` 상태이므로, 실제 업로드와 배포 명령을 학생이 직접 채워야 합니다.
+- starter에서는 `deploy.yml`이 `echo TODO...` 상태이므로, 실제 업로드와 배포 명령을 실습자가 직접 채워야 합니다.
 
 이 단계에서 특히 강조해야 하는 문장:
 
@@ -121,7 +121,7 @@ docker build -t aandi-deployment-runtime-lab:local .
 2. Actions에서 `Deploy to EC2`를 실행합니다.
 3. EC2에서 컨테이너 상태와 로그를 확인합니다.
 
-## 학생 체크 질문
+## 실습자 체크 질문
 
 - `Dockerfile`은 왜 jar 파일 경로를 알아야 하나요?
 - 운영 DB 주소를 `application-prod.yaml`에 직접 적지 않는 이유는 무엇인가요?
@@ -129,7 +129,7 @@ docker build -t aandi-deployment-runtime-lab:local .
 - 배포 후 첫 확인이 왜 로그인가요?
 - 환경변수 우선순위를 모르고 있으면 어떤 문제가 생길 수 있을까요?
 
-## 강사 / PPT 체크 질문
+## 리뷰어 / PPT 체크 질문
 
 - jar → Docker image → EC2 실행 흐름 그림이 있는가
 - `application.yaml`과 `application-prod.yaml` 차이를 시연할 수 있는가
