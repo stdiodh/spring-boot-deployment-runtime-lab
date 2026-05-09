@@ -2,7 +2,7 @@
 
 Docker, EC2, GitHub Actions, Secrets를 이용해 로컬에서 돌아가던 Spring Boot 앱을 운영 환경으로 옮겨보는 실습입니다.
 
-이번 시퀀스 한 줄 요약  
+이번 시퀀스 한 줄 요약
 이번 실습은 실행 가능한 애플리케이션을 하나의 배포 단위로 묶고, 환경변수와 시크릿을 분리한 뒤, GitHub Actions로 EC2까지 전달해보는 과정입니다.
 
 ## 이 레포에서 다루는 것
@@ -18,19 +18,19 @@ Docker, EC2, GitHub Actions, Secrets를 이용해 로컬에서 돌아가던 Spri
 
 - [이론 문서](./docs/theory.md)
 - [구현 문서](./docs/implementation.md)
-- [정답 가이드](./docs/answer-guide.md)
+- [참고 구현 가이드](./docs/answer-guide.md)
 - [체크리스트](./docs/checklist.md)
 - [제공 자산 정리](./docs/assets.md)
 
-## 학생이 직접 구현하는 핵심 파일
+## 실습에서 직접 구현하는 핵심 파일
 
 - [`Dockerfile`](./Dockerfile)
 - [`src/main/resources/application-prod.yaml`](./src/main/resources/application-prod.yaml)
 - [`deploy/compose.prod.yaml`](./deploy/compose.prod.yaml)
 - [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml)
 
-이 브랜치는 `09-implementation` starter입니다.  
-핵심 파일에는 TODO가 들어 있고, 정답 비교는 `09-answer` 브랜치에서 합니다.
+이 브랜치는 `09-implementation` starter입니다.
+핵심 파일에는 TODO가 들어 있고, 참고 구현 비교는 `09-answer` 브랜치에서 합니다.
 
 ## 실행 흐름 요약
 

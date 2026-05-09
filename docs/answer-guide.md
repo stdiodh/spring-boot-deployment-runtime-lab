@@ -1,9 +1,9 @@
-# 배포와 실행 환경 정답 비교 가이드
+# 배포와 실행 환경 참고 구현 비교 가이드
 
-이 브랜치는 starter이므로 정답 코드를 그대로 싣지 않습니다.
-완성된 비교 기준은 `09-answer` 브랜치에서 확인합니다.
+이 브랜치는 starter이므로 참고 구현를 그대로 싣지 않습니다.
+완성된 흐름은 `09-answer` 브랜치에서 확인합니다.
 
-## 정답 브랜치에서 꼭 비교할 파일
+## 참고 구현 브랜치에서 꼭 비교할 파일
 
 - `Dockerfile`
 - `src/main/resources/application-prod.yaml`
@@ -25,7 +25,7 @@
 
 ### 1. 설정 파일이 실제 비밀값을 가지고 있지 않은가
 
-정답 브랜치의 `application-prod.yaml`은 아래처럼 자리만 보여야 합니다.
+참고 구현 브랜치의 `application-prod.yaml`은 아래처럼 자리만 보여야 합니다.
 
 ```yaml
 spring:
@@ -35,13 +35,13 @@ spring:
     password: ${DB_PASSWORD:}
 ```
 
-즉, 정답 비교에서 먼저 볼 것은
+즉, 참고 구현 비교에서 먼저 볼 것은
 "실제 비밀번호가 보이는가"가 아니라
 "실제 비밀번호가 보이지 않는가"입니다.
 
 ### 2. workflow가 pem key를 코드에 적지 않는가
 
-정답 브랜치의 `deploy.yml`은 아래처럼 Secrets를 참조해야 합니다.
+참고 구현 브랜치의 `deploy.yml`은 아래처럼 Secrets를 참조해야 합니다.
 
 ```yaml
 printf '%s' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/aandi-ec2.pem
@@ -56,7 +56,7 @@ chmod 600 ~/.ssh/aandi-ec2.pem
 
 ### 3. 마지막에 로그 확인이 살아 있는가
 
-정답 브랜치에서는 배포 마지막에 아래 같은 흐름이 보이는지 확인해야 합니다.
+참고 구현 브랜치에서는 배포 마지막에 아래 같은 흐름이 보이는지 확인해야 합니다.
 
 ```bash
 docker compose up -d
@@ -89,7 +89,7 @@ docker logs --tail 50 aandi-app
 - `PROD_MYSQL_DATABASE`
 - `PROD_MYSQL_ROOT_PASSWORD`
 
-## 강사가 빠르게 볼 체크 포인트
+## 리뷰어가 빠르게 볼 체크 포인트
 
 - TODO가 실제 명령과 환경변수 연결로 바뀌었는가
 - pem key, DB 비밀번호, OAuth 시크릿이 코드에 직접 들어가 있지 않은가
