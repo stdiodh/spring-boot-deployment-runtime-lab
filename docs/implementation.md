@@ -1,144 +1,120 @@
-# 배포와 실행 환경 구현 가이드
+# 구현 가이드
 
-## 이 도메인이 필요한 이유
+## 1. 구현 전에 확인할 문제
 
-지금까지는 앱을 만드는 것에 집중했다면,
-이번에는 그 앱을 실행 환경으로 옮기는 것을 다룹니다.
-즉, 동작하는 코드를 운영 환경에서도 다시 실행할 수 있게 만드는 과정입니다.
+이번 구현은 애플리케이션 기능을 추가하는 작업이 아닙니다. 이미 동작하는 Spring Boot 앱을 jar로 만들고, Docker 실행 단위로 묶고, 운영 설정을 환경변수로 분리해 서버에서도 같은 방식으로 띄울 수 있게 만드는 작업입니다.
 
-## 실습에서 완성할 최종 흐름
+완성해야 할 흐름은 아래와 같습니다.
 
-1. `Dockerfile`로 앱 jar를 컨테이너 실행 단위로 묶습니다.
-2. `application-prod.yaml`로 운영 설정을 분리합니다.
-3. `compose.prod.yaml`로 앱, MySQL, Redis 실행 구성을 맞춥니다.
-4. GitHub Actions가 jar를 만들고 EC2로 전달하도록 연결합니다.
-5. Secrets와 로그 확인까지 이어서 배포 흐름을 마무리합니다.
+```text
+test -> bootJar -> Dockerfile -> image build -> compose 실행 -> 상태와 로그 확인
+```
 
-## 이번 실습에서 같이 봐야 하는 실무 질문
-
-1. 왜 운영 비밀값은 설정 파일이 아니라 환경변수와 Secrets로 가야 하는가
-2. 왜 배포 마지막 확인은 “명령 성공”이 아니라 “로그 확인”이어야 하는가
-
-## 실습자가 직접 구현할 순서
+## 2. 구현 순서
 
 1. `Dockerfile`에서 jar 복사 경로와 실행 명령을 채웁니다.
-2. `application-prod.yaml`에서 운영 환경변수 자리를 채웁니다.
-3. `deploy/compose.prod.yaml`에서 앱 컨테이너와 의존 서비스 연결을 확인합니다.
-4. `.github/workflows/deploy.yml`에서 jar 빌드, 업로드, EC2 재기동 흐름을 완성합니다.
-5. GitHub Secrets를 채운 뒤 워크플로우를 실행하고 로그를 확인합니다.
+2. `src/main/resources/application-prod.yaml`에서 운영 값을 환경변수로 받도록 확인합니다.
+3. `deploy/compose.prod.yaml`에서 앱, MySQL, Redis 실행 구성을 확인합니다.
+4. `.github/workflows/deploy.yml`에서 release bundle, SSH key, 업로드, EC2 실행 흐름을 채웁니다.
+5. 컨테이너 상태와 로그로 실행 결과를 확인합니다.
 
-## TODO를 넣을 파일
+## 3. Step 1. Dockerfile 확인
 
-- `Dockerfile`
-- `src/main/resources/application-prod.yaml`
-- `deploy/compose.prod.yaml`
-- `.github/workflows/deploy.yml`
+### 해야 할 일
 
-## 각 파일의 역할
+`Dockerfile`에서 `bootJar` 결과물을 컨테이너 안으로 복사하고 Java 실행 명령으로 이어지는 TODO를 채웁니다.
 
-- `Dockerfile`: jar를 컨테이너 안에서 실행할 수 있게 묶는 파일
-- `application-prod.yaml`: 운영 환경에서 필요한 값을 밖에서 받는 설정 파일
-- `compose.prod.yaml`: 앱, MySQL, Redis를 어떤 방식으로 같이 띄울지 정하는 파일
-- `deploy.yml`: 테스트, 빌드, 업로드, EC2 재기동을 자동으로 연결하는 파일
+### 왜 이 작업을 하는가
 
-## 미리 제공할 것
+배포 단위는 소스 폴더 전체가 아니라 실행 가능한 결과물입니다. Dockerfile은 그 결과물을 어떤 런타임에서 어떤 명령으로 실행할지 고정합니다.
 
-- 기존 애플리케이션 코드와 테스트
-- 로컬 개발용 `compose.yaml`
-- EC2 준비 가이드
-- GitHub Secrets에 넣을 항목 목록
-- 기본 워크플로우 구조와 배포 대상 경로
+### 확인 방법
 
-## 단계별 구현 안내
-
-### 1. Dockerfile을 완성합니다
-
-- `build/libs/*.jar`를 컨테이너 안으로 복사합니다.
-- 컨테이너 안에서 어떤 명령으로 앱을 띄울지 적습니다.
-- 지금 단계에서는 멀티 스테이지 최적화보다 “jar가 어떻게 실행되는지” 이해하는 것이 더 중요합니다.
-
-이 단계에서 먼저 이해해야 하는 문장:
-
-- "배포 단위는 소스코드 폴더가 아니라 실행 가능한 결과물이다."
-- "Dockerfile은 그 결과물을 어떤 환경에서 띄울지 고정한다."
-
-### 2. 운영 profile을 완성합니다
-
-- `application-prod.yaml`에 DB, Redis, JWT, SMTP, OAuth 값을 환경변수로 연결합니다.
-- 운영 값을 하드코딩하지 않습니다.
-- 로컬 기본값은 `application.yaml`에 두고, 운영값은 prod profile로 분리합니다.
-
-이 단계의 핵심은 단순히 `${...}`를 치는 것이 아니라,
-"설정 파일은 실제 값을 저장하는 곳이 아니라 필요한 값의 자리를 정의하는 곳"이라는 점을 이해하는 것입니다.
-
-### 3. 운영 compose를 맞춥니다
-
-- 앱 컨테이너에 `SPRING_PROFILES_ACTIVE=prod`가 들어가도록 확인합니다.
-- 앱이 MySQL, Redis와 연결될 수 있도록 환경변수를 전달합니다.
-- 운영 compose는 실행 확인용 최소 구성으로 유지합니다.
-
-여기서 실습자가 같이 떠올려야 하는 질문:
-
-- "운영 환경에서 어떤 값은 compose가 넘기고, 어떤 값은 Secrets가 만들까?"
-- "환경변수 우선순위는 어디서 결정될까?"
-
-### 4. GitHub Actions 배포 파일을 완성합니다
-
-- `./gradlew test bootJar`를 실행합니다.
-- 만들어진 jar와 `Dockerfile`, `deploy/compose.prod.yaml`을 EC2로 올립니다.
-- EC2 안에서 `.env`를 만들고 `docker compose up -d`를 다시 실행합니다.
-- SSH 키, DB 비밀번호, OAuth 시크릿은 모두 GitHub Secrets에서 받습니다.
-- starter에서는 `deploy.yml`이 `echo TODO...` 상태이므로, 실제 업로드와 배포 명령을 실습자가 직접 채워야 합니다.
-
-이 단계에서 특히 강조해야 하는 문장:
-
-- "pem key를 코드에 넣지 않는다."
-- "workflow 안에서도 비밀값은 Secrets 참조로만 쓴다."
-
-### 5. 마지막에 로그를 확인합니다
-
-- 배포가 끝났다고 바로 성공으로 보지 않습니다.
-- `docker compose ps`와 `docker logs --tail 50 aandi-app`까지 확인합니다.
-- 앱이 떴는지, DB 연결이 실패했는지, 포트가 충돌했는지를 로그에서 먼저 봅니다.
-
-이 단계의 핵심은 "배포 성공"의 기준을 명확히 잡는 것입니다.
-컨테이너를 띄웠다는 사실보다, 애플리케이션이 실제로 정상 기동했는지가 더 중요합니다.
-
-## 실행 확인 방법
-
-### 로컬
+아래 명령으로 jar와 image 빌드를 분리해서 확인합니다.
 
 ```bash
-docker compose up -d
-./gradlew test
 ./gradlew bootJar
 docker build -t aandi-deployment-runtime-lab:local .
 ```
 
-### 운영
+## 4. Step 2. 운영 profile 확인
 
-1. GitHub 저장소의 Secrets를 채웁니다.
-2. Actions에서 `Deploy to EC2`를 실행합니다.
-3. EC2에서 컨테이너 상태와 로그를 확인합니다.
+### 해야 할 일
 
-## 실습자 체크 질문
+`src/main/resources/application-prod.yaml`에서 DB, Redis, JWT, mail, OAuth 값을 환경변수로 받는지 확인합니다.
 
-- `Dockerfile`은 왜 jar 파일 경로를 알아야 하나요?
-- 운영 DB 주소를 `application-prod.yaml`에 직접 적지 않는 이유는 무엇인가요?
-- EC2 pem 키를 Secrets로 빼는 이유는 무엇인가요?
-- 배포 후 첫 확인이 왜 로그인가요?
-- 환경변수 우선순위를 모르고 있으면 어떤 문제가 생길 수 있을까요?
+### 왜 이 작업을 하는가
 
-## 리뷰어 / PPT 체크 질문
+운영 값은 환경마다 달라지고 민감한 값도 포함합니다. 설정 파일은 실제 값을 보관하는 곳이 아니라 어떤 값을 외부에서 받아야 하는지 정의하는 곳이어야 합니다.
 
-- jar → Docker image → EC2 실행 흐름 그림이 있는가
-- `application.yaml`과 `application-prod.yaml` 차이를 시연할 수 있는가
-- Secrets를 코드에 넣지 않는 이유를 분명히 설명하는가
-- 마지막에 로그를 보여주며 “배포 완료”를 판단하는 장면이 있는가
-- workflow와 운영 시크릿의 역할 구분이 선명한가
+### 확인 방법
 
-## 다음 도메인 연결 포인트
+- 실제 DB 비밀번호, JWT secret, OAuth secret, SMTP password가 파일에 직접 들어가지 않았는지 확인합니다.
+- 환경변수 이름과 실제 secret 값을 구분해서 설명합니다.
 
-이번 시퀀스는 배포를 한 번 성공시키는 흐름까지가 핵심입니다.
-다음 시퀀스에서는 이 과정을 더 안정적으로 운영하기 위한
-CI/CD 전략과 자동화 규칙으로 확장할 수 있습니다.
+## 5. Step 3. 운영 compose 확인
+
+### 해야 할 일
+
+`deploy/compose.prod.yaml`에서 앱 컨테이너가 prod profile로 실행되고 MySQL, Redis와 연결되는지 확인합니다.
+
+### 왜 이 작업을 하는가
+
+애플리케이션만 실행되어도 DB나 Redis 연결 값이 맞지 않으면 정상 기동하지 못합니다. compose 파일은 앱과 의존 서비스를 같은 실행 묶음으로 확인하게 해줍니다.
+
+### 확인 방법
+
+- 앱 컨테이너에 필요한 환경변수가 전달되는지 확인합니다.
+- MySQL healthcheck와 Redis service가 앱 실행 흐름에 어떤 의미를 갖는지 설명합니다.
+
+## 6. Step 4. 배포 workflow 확인
+
+### 해야 할 일
+
+`.github/workflows/deploy.yml`에서 테스트, jar 빌드, release bundle 준비, SSH key 복원, EC2 업로드, 컨테이너 재기동 흐름을 채웁니다.
+
+### 왜 이 작업을 하는가
+
+서버에 접속해 손으로 반복하는 작업은 누락되기 쉽습니다. workflow는 "어떤 파일을 만들고, 어디로 옮기고, 어떤 순서로 실행할지"를 기록합니다.
+
+### 확인 방법
+
+- workflow 안에 실제 pem key나 운영 비밀번호를 직접 쓰지 않았는지 확인합니다.
+- GitHub Secrets는 값 자체가 아니라 이름으로만 참조하는지 확인합니다.
+- EC2 환경이 없는 경우 로컬에서는 `./gradlew test bootJar`와 Docker build까지 확인합니다.
+
+## 7. Step 5. 로그로 결과 확인
+
+### 해야 할 일
+
+배포 후 `docker compose ps`와 `docker logs`로 앱 상태를 확인합니다.
+
+### 왜 이 작업을 하는가
+
+배포 명령이 끝났다고 해서 앱이 정상 기동한 것은 아닙니다. DB 연결 실패, 포트 충돌, secret 누락은 로그에서 드러납니다.
+
+### 확인 방법
+
+운영 환경에서는 아래 계열의 명령으로 상태와 로그를 확인합니다.
+
+```bash
+docker compose -f deploy/compose.prod.yaml ps
+docker logs --tail 50 aandi-app
+```
+
+## 마지막 확인
+
+- `./gradlew test`가 통과합니다.
+- `./gradlew bootJar`가 통과합니다.
+- Docker image build가 성공합니다.
+- 운영 secret 값은 코드에 직접 남지 않습니다.
+- 배포 성공 기준에 컨테이너 상태와 로그 확인이 포함되어 있습니다.
+
+<details>
+<summary>멘토용 진행 포인트</summary>
+
+- 각 Step에서 명령을 외우는 것보다 "왜 이 단계가 배포 성공 판정에 필요한가"를 설명하게 합니다.
+- 힌트가 필요하면 jar 경로, 환경변수 주입 위치, compose service 연결, 로그 확인 순서로 좁혀갑니다.
+- EC2가 없는 환경에서는 운영 배포 대신 로컬 build/test/image build까지를 통과 기준으로 기록합니다.
+
+</details>
