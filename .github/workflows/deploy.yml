@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 10-answer
+      - 10-implementation
 
 jobs:
   build:
