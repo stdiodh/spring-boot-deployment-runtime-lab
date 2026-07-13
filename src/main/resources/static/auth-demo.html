@@ -261,7 +261,11 @@
   <script>
     const statusBox = document.getElementById("status");
     const query = new URLSearchParams(window.location.search);
-    let accessToken = query.get("token") || "";
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    let accessToken = fragment.get("access_token") || "";
+    if (accessToken) {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
 
     function printStatus(title, payload) {
       const rendered = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
@@ -364,12 +368,13 @@
     if (query.get("oauth") === "success") {
       printStatus("OAuth 로그인 성공", {
         provider: query.get("provider"),
-        email: query.get("email"),
         isNewUser: query.get("isNewUser"),
-        accessToken
+        tokenReceived: Boolean(accessToken)
       });
+    } else if (query.get("oauth") === "link_required") {
+      printStatus("OAuth 계정 연결 확인 필요", "같은 이메일의 기존 계정은 자동 연결하지 않습니다.");
     } else if (accessToken) {
-      printStatus("OAuth 또는 로그인 토큰 감지", { accessToken });
+      printStatus("OAuth 토큰 감지", { tokenReceived: true });
     }
   </script>
 </body>

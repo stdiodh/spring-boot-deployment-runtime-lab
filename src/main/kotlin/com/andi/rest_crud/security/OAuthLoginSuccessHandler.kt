@@ -1,6 +1,7 @@
 package com.andi.rest_crud.security
 
 import com.andi.rest_crud.service.OAuthAccountService
+import com.andi.rest_crud.exception.OAuthAccountLinkRequiredException
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.beans.factory.annotation.Value
@@ -30,16 +31,25 @@ class OAuthLoginSuccessHandler(
             providerId = oauthUser.getAttribute<String>("providerId")
                 ?: throw IllegalStateException("OAuth provider id를 읽을 수 없습니다."),
             email = oauthUser.getAttribute<String>("email")
-                ?: throw IllegalStateException("OAuth email을 읽을 수 없습니다.")
+                ?: throw IllegalStateException("OAuth email을 읽을 수 없습니다."),
+            emailVerified = oauthUser.getAttribute<Boolean>("emailVerified") == true
         )
 
-        val loginResponse = oAuthAccountService.handleOAuthLogin(profile)
+        val loginResponse = try {
+            oAuthAccountService.handleOAuthLogin(profile)
+        } catch (_: OAuthAccountLinkRequiredException) {
+            val linkRequiredUrl = UriComponentsBuilder.fromUriString(frontendUrl)
+                .queryParam("oauth", "link_required")
+                .build()
+                .toUriString()
+            response.sendRedirect(linkRequiredUrl)
+            return
+        }
         val redirectUrl = UriComponentsBuilder.fromUriString(frontendUrl)
             .queryParam("oauth", "success")
             .queryParam("provider", loginResponse.provider)
-            .queryParam("email", loginResponse.email)
             .queryParam("isNewUser", loginResponse.isNewUser)
-            .queryParam("token", loginResponse.accessToken)
+            .fragment("access_token=${loginResponse.accessToken}")
             .build()
             .toUriString()
 

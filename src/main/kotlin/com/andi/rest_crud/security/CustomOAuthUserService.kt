@@ -5,6 +5,8 @@ import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserService
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User
 import org.springframework.security.oauth2.core.user.OAuth2User
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException
+import org.springframework.security.oauth2.core.OAuth2Error
 import org.springframework.stereotype.Service
 
 @Service
@@ -18,11 +20,19 @@ class CustomOAuthUserService : OAuth2UserService<OAuth2UserRequest, OAuth2User> 
             ?: throw IllegalStateException("OAuth 응답에서 email을 찾을 수 없습니다.")
         val providerId = oauthUser.getAttribute<String>("sub")
             ?: throw IllegalStateException("OAuth 응답에서 provider id를 찾을 수 없습니다.")
+        val emailVerified = oauthUser.getAttribute<Boolean>("email_verified") == true
+        if (!emailVerified) {
+            throw OAuth2AuthenticationException(
+                OAuth2Error("unverified_email"),
+                "검증된 OAuth email만 사용할 수 있습니다."
+            )
+        }
 
         val attributes = oauthUser.attributes.toMutableMap().apply {
             put("provider", provider)
             put("providerId", providerId)
             put("email", email)
+            put("emailVerified", true)
         }
 
         return DefaultOAuth2User(
