@@ -30,6 +30,9 @@ class OAuthAccountService(
             .orElse(null)
 
         if (existingOAuthUser != null) {
+            if (existingOAuthUser.email != profile.email && userRepository.existsByEmail(profile.email)) {
+                throw OAuthAccountLinkRequiredException()
+            }
             existingOAuthUser.email = profile.email
             val savedUser = userRepository.save(existingOAuthUser)
             return OAuthLinkResult(savedUser, false)

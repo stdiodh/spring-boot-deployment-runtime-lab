@@ -39,4 +39,22 @@ class OAuthAccountServiceTest {
             service.handleOAuthLogin(profile)
         }
     }
+
+    @Test
+    fun `기존 OAuth 계정의 변경 email이 다른 계정과 겹치면 갱신하지 않는다`() {
+        val profile = OAuthUserProfile("GOOGLE", "provider-id", "occupied@example.com", true)
+        val oauthUser = User(
+            email = "old@example.com",
+            password = "encoded",
+            authProvider = "GOOGLE",
+            providerId = "provider-id"
+        )
+        `when`(userRepository.findByAuthProviderAndProviderId("GOOGLE", "provider-id"))
+            .thenReturn(Optional.of(oauthUser))
+        `when`(userRepository.existsByEmail(profile.email)).thenReturn(true)
+
+        assertThrows(OAuthAccountLinkRequiredException::class.java) {
+            service.handleOAuthLogin(profile)
+        }
+    }
 }

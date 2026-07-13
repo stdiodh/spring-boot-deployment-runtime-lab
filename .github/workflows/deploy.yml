@@ -34,7 +34,7 @@ jobs:
 
       - name: Upload release artifact
         # TODO 3. release 디렉터리를 artifact로 업로드하세요.
-        run: echo "TODO: upload artifact step을 채우세요."
+        run: 'echo "TODO: upload artifact step을 채우세요."'
 
   deploy:
     runs-on: ubuntu-latest
@@ -45,7 +45,7 @@ jobs:
     steps:
       - name: Download release artifact
         # TODO 4. build job이 올린 artifact를 다시 내려받으세요.
-        run: echo "TODO: download artifact step을 채우세요."
+        run: 'echo "TODO: download artifact step을 채우세요."'
 
       - name: Write SSH key
         run: |

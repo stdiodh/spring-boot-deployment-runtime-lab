@@ -3,6 +3,7 @@ package com.andi.rest_crud.controller
 import com.andi.rest_crud.dto.PostCreateRequest
 import com.andi.rest_crud.dto.PostResponse
 import com.andi.rest_crud.dto.PostUpdateRequest
+import com.andi.rest_crud.service.PostCacheService
 import com.andi.rest_crud.service.PostQueryService
 import com.andi.rest_crud.service.PostService
 import jakarta.validation.Valid
@@ -22,7 +23,8 @@ import java.security.Principal
 @RequestMapping("/posts")
 class PostController(
     private val postService: PostService,
-    private val postQueryService: PostQueryService
+    private val postQueryService: PostQueryService,
+    private val postCacheService: PostCacheService
 ) {
 
     @GetMapping
@@ -47,12 +49,15 @@ class PostController(
         @Valid @RequestBody request: PostUpdateRequest,
         principal: Principal
     ): PostResponse {
-        return postService.update(id, request, principal.name)
+        val response = postService.update(id, request, principal.name)
+        postCacheService.evict(id)
+        return response
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun delete(@PathVariable id: Long, principal: Principal) {
         postService.delete(id, principal.name)
+        postCacheService.evict(id)
     }
 }

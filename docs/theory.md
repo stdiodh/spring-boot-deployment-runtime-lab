@@ -68,7 +68,7 @@ sequenceDiagram
     participant VerifyScript as scripts/check-deploy.sh
 
     Workflow->>DeployScript: bash scripts/deploy.sh RELEASE_DIR
-    DeployScript->>Compose: down old containers
+    DeployScript->>Compose: keep dependencies running
     DeployScript->>Compose: docker build
     DeployScript->>Compose: up -d
     Workflow->>VerifyScript: bash scripts/check-deploy.sh RELEASE_DIR
@@ -144,7 +144,7 @@ deploy workflow는 release bundle을 만들고, artifact로 전달한 뒤, EC2�
 
 확인 질문:
 
-- deploy script는 기존 컨테이너 정리, image build, compose up을 담당하나요?
+- deploy script는 전체 compose를 내리지 않고 image build와 compose up을 담당하나요?
 - verify script는 `ps`, logs, HTTP 응답 확인을 담당하나요?
 - verify 실패가 workflow 실패로 처리되나요?
 

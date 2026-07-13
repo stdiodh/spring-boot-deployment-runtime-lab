@@ -25,6 +25,10 @@ class PostCacheService(
         stringRedisTemplate.opsForValue().set(key(postId), value, ttl())
     }
 
+    fun evict(postId: Long) {
+        stringRedisTemplate.delete(key(postId))
+    }
+
     fun key(postId: Long): String = "post:$postId"
 
     fun ttl(): Duration = Duration.ofSeconds(postTtlSeconds)
