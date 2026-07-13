@@ -24,16 +24,16 @@ class PostServiceTest {
             id = 1L,
             title = request.title,
             content = request.content,
-            author = request.author
+            author = "owner@example.com"
         )
         `when`(postRepository.save(any(PostEntity::class.java))).thenReturn(savedPost)
 
-        val result = postService.create(request)
+        val result = postService.create(request, "owner@example.com")
 
         assertEquals(1L, result.id)
         assertEquals(request.title, result.title)
         assertEquals(request.content, result.content)
-        assertEquals(request.author, result.author)
+        assertEquals("owner@example.com", result.author)
     }
 
     @Test

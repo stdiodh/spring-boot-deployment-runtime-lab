@@ -9,12 +9,10 @@ object TestFixtureFactory {
 
     fun postCreateRequest(
         title: String = "테스트 제목",
-        content: String = "테스트 내용",
-        author: String = "tester"
+        content: String = "테스트 내용"
     ): PostCreateRequest = PostCreateRequest(
         title = title,
-        content = content,
-        author = author
+        content = content
     )
 
     fun postEntity(
