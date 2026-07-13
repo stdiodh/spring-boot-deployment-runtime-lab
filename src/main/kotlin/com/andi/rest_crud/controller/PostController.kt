@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import java.security.Principal
 
 @RestController
 @RequestMapping("/posts")
@@ -36,18 +37,22 @@ class PostController(
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    fun create(@Valid @RequestBody request: PostCreateRequest): PostResponse {
-        return postService.create(request)
+    fun create(@Valid @RequestBody request: PostCreateRequest, principal: Principal): PostResponse {
+        return postService.create(request, principal.name)
     }
 
     @PutMapping("/{id}")
-    fun update(@PathVariable id: Long, @Valid @RequestBody request: PostUpdateRequest): PostResponse {
-        return postService.update(id, request)
+    fun update(
+        @PathVariable id: Long,
+        @Valid @RequestBody request: PostUpdateRequest,
+        principal: Principal
+    ): PostResponse {
+        return postService.update(id, request, principal.name)
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun delete(@PathVariable id: Long) {
-        postService.delete(id)
+    fun delete(@PathVariable id: Long, principal: Principal) {
+        postService.delete(id, principal.name)
     }
 }

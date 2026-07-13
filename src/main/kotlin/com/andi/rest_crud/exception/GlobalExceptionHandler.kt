@@ -31,6 +31,15 @@ class GlobalExceptionHandler {
         )
     }
 
+    @ExceptionHandler(ForbiddenPostAccessException::class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    fun handleForbiddenPostAccessException(exception: ForbiddenPostAccessException): ErrorResponse {
+        return ErrorResponse(
+            code = "FORBIDDEN_POST_ACCESS",
+            message = exception.message ?: "게시글 접근 권한이 없습니다."
+        )
+    }
+
     @ExceptionHandler(UserAlreadyExistsException::class)
     @ResponseStatus(HttpStatus.CONFLICT)
     fun handleUserAlreadyExistsException(exception: UserAlreadyExistsException): ErrorResponse {

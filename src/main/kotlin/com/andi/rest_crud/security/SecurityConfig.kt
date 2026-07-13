@@ -2,6 +2,7 @@ package com.andi.rest_crud.security
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpMethod
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
@@ -35,8 +36,12 @@ class SecurityConfig(
                         "/oauth2/**",
                         "/login/oauth2/**"
                     ).permitAll()
+                    .requestMatchers(HttpMethod.GET, "/posts", "/posts/**").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/posts").authenticated()
+                    .requestMatchers(HttpMethod.PUT, "/posts/**").authenticated()
+                    .requestMatchers(HttpMethod.DELETE, "/posts/**").authenticated()
                     .requestMatchers("/auth/me").authenticated()
-                    .anyRequest().permitAll()
+                    .anyRequest().authenticated()
             }
             .httpBasic { it.disable() }
             .formLogin { it.disable() }
