@@ -28,9 +28,7 @@ git diff origin/09-implementation..origin/09-answer
 
 1. [이론 정리](./docs/theory.md)
 2. [구현 가이드](./docs/implementation.md)
-3. [참고 구현 가이드](./docs/answer-guide.md)
-4. [체크리스트](./docs/checklist.md)
-5. [제공 자료 안내](./docs/assets.md)
+3. [체크리스트](./docs/checklist.md)
 
 ## 실행 / 테스트 방법
 

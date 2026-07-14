@@ -239,7 +239,7 @@ flowchart TD
 
 ## 9. 다음 구현으로 연결되는 지점
 
-`docs/answer-guide.md`를 볼 때는 Dockerfile의 문법보다 jar가 image에 들어가고, compose가 환경변수를 전달하며, 로그가 최종 기동 판정으로 이어지는 순서를 먼저 확인합니다. 다음 시퀀스에서는 이 수동 흐름을 workflow와 script로 더 안정적으로 자동화합니다.
+`docs/implementation.md`와 `docs/checklist.md`를 볼 때는 Dockerfile의 문법보다 jar가 image에 들어가고, compose가 환경변수를 전달하며, 로그가 최종 기동 판정으로 이어지는 순서를 먼저 확인합니다. 다음 시퀀스에서는 이 수동 흐름을 workflow와 script로 더 안정적으로 자동화합니다.
 
 <details>
 <summary>멘토용 설명 포인트</summary>
