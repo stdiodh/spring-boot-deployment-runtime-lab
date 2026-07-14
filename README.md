@@ -30,7 +30,6 @@ git checkout -b feat/<이름>
 1. [이론 정리](./docs/theory.md)
 2. [구현 가이드](./docs/implementation.md)
 3. [체크리스트](./docs/checklist.md)
-4. [제공 자료 안내](./docs/assets.md)
 
 핵심 파일은 아래 순서로 확인합니다.
 
