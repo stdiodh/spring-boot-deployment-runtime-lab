@@ -9,6 +9,138 @@ window.visualLabData = {
     "kind": "pipeline",
     "title": "Pipeline Gate",
     "instruction": "실패 지점을 선택해 이후 job이 차단되는지와 배포 성공을 판정할 증거를 확인하세요.",
+    "nodes": {
+      "git-trigger": {
+        "label": "Git trigger",
+        "icon": "person",
+        "kind": "trigger",
+        "role": "push 또는 수동 실행으로 workflow 시작",
+        "boundary": "Source event"
+      },
+      "github-actions": {
+        "label": "GitHub Actions",
+        "icon": "pipeline",
+        "kind": "orchestrator",
+        "role": "job 순서와 needs gate 관리",
+        "boundary": "Workflow",
+        "codePointIds": [
+          "workflow-stages"
+        ]
+      },
+      "build-job": {
+        "label": "build job",
+        "icon": "gate",
+        "kind": "job gate",
+        "role": "test, bootJar, artifact upload",
+        "boundary": "Build job",
+        "codePointIds": [
+          "workflow-stages"
+        ]
+      },
+      "release-bundle": {
+        "label": "release-bundle",
+        "icon": "artifact",
+        "kind": "artifact",
+        "role": "job 사이에서 전달되는 검증된 배포 파일",
+        "boundary": "Artifact transfer"
+      },
+      "deploy-job": {
+        "label": "deploy job",
+        "icon": "gate",
+        "kind": "job gate",
+        "role": "artifact를 받아 EC2 갱신 수행",
+        "boundary": "Deploy job",
+        "codePointIds": [
+          "workflow-stages"
+        ]
+      },
+      "secret-references": {
+        "label": "Secret references",
+        "icon": "security",
+        "kind": "protected config",
+        "role": "SSH와 운영 환경 변수 이름을 안전하게 참조",
+        "boundary": "Trust boundary"
+      },
+      "ec2-host": {
+        "label": "EC2 host",
+        "icon": "host",
+        "kind": "runtime host",
+        "role": "release bundle을 받아 배포 script 실행",
+        "boundary": "Remote runtime"
+      },
+      "deploy-script": {
+        "label": "scripts/deploy.sh",
+        "icon": "tool",
+        "kind": "deployment script",
+        "role": "app image build와 compose 갱신",
+        "boundary": "Remote runtime",
+        "codePointIds": [
+          "inline-deploy-steps"
+        ]
+      },
+      "app-container": {
+        "label": "Application container",
+        "icon": "runtime",
+        "kind": "runtime instance",
+        "role": "갱신된 애플리케이션 실행 단위",
+        "boundary": "Remote runtime"
+      },
+      "verify-job": {
+        "label": "verify job",
+        "icon": "gate",
+        "kind": "verification gate",
+        "role": "deploy 통과 뒤 서비스 증거 확인",
+        "boundary": "Verify job",
+        "codePointIds": [
+          "workflow-stages"
+        ]
+      },
+      "verify-script": {
+        "label": "scripts/check-deploy.sh",
+        "icon": "test",
+        "kind": "verification script",
+        "role": "compose 상태, 로그, HTTP 확인",
+        "boundary": "Verification",
+        "codePointIds": [
+          "inline-deploy-steps"
+        ]
+      },
+      "http-response": {
+        "label": "HTTP response",
+        "icon": "response",
+        "kind": "runtime evidence",
+        "role": "애플리케이션 응답 가능 여부",
+        "boundary": "Verification"
+      },
+      "workflow-result": {
+        "label": "Workflow result",
+        "icon": "evidence",
+        "kind": "decision evidence",
+        "role": "build, deploy, verify의 최종 판정",
+        "boundary": "Workflow result"
+      },
+      "build-failure": {
+        "label": "Build failure",
+        "icon": "evidence",
+        "kind": "failure evidence",
+        "role": "test 또는 bootJar의 첫 실패",
+        "boundary": "Build job"
+      },
+      "deploy-failure": {
+        "label": "Deploy failure",
+        "icon": "evidence",
+        "kind": "failure evidence",
+        "role": "서버 파일 전달 또는 app 갱신 실패",
+        "boundary": "Deploy job"
+      },
+      "verify-failure": {
+        "label": "Verification failure",
+        "icon": "evidence",
+        "kind": "failure evidence",
+        "role": "compose, 로그, HTTP 중 첫 실패",
+        "boundary": "Verify job"
+      }
+    },
     "scenarios": [
       {
         "id": "pipeline-verified",
@@ -27,6 +159,132 @@ window.visualLabData = {
           "check-deploy.sh",
           "HTTP response"
         ],
+        "diagram": {
+          "caption": "needs gate가 build, deploy, verify를 차례로 열고, artifact 전달과 runtime 검증이 모두 통과해야 workflow가 성공합니다.",
+          "lanes": [
+            {
+              "id": "workflow-orchestration",
+              "label": "Workflow orchestration",
+              "description": "job의 성공 상태가 다음 needs gate를 여는 조건입니다.",
+              "steps": [
+                {
+                  "from": "git-trigger",
+                  "to": "github-actions",
+                  "verb": "workflow 시작",
+                  "payload": "push | workflow_dispatch",
+                  "kind": "request"
+                },
+                {
+                  "from": "github-actions",
+                  "to": "build-job",
+                  "verb": "build 실행",
+                  "payload": "./gradlew test bootJar",
+                  "kind": "call",
+                  "codePointIds": [
+                    "workflow-stages"
+                  ]
+                },
+                {
+                  "from": "build-job",
+                  "to": "release-bundle",
+                  "verb": "artifact 업로드",
+                  "payload": "release-bundle",
+                  "kind": "transform"
+                },
+                {
+                  "from": "release-bundle",
+                  "to": "deploy-job",
+                  "verb": "artifact 다운로드",
+                  "payload": "needs: build passed",
+                  "kind": "call"
+                },
+                {
+                  "from": "deploy-job",
+                  "to": "verify-job",
+                  "verb": "verify gate 개방",
+                  "payload": "needs: deploy passed",
+                  "kind": "call",
+                  "concept": "실패 차단 gate"
+                }
+              ]
+            },
+            {
+              "id": "remote-deploy",
+              "label": "Artifact transfer → EC2 runtime",
+              "description": "deploy job은 bundle과 secret 참조를 사용해 원격 app container를 갱신합니다.",
+              "steps": [
+                {
+                  "from": "deploy-job",
+                  "to": "ec2-host",
+                  "verb": "전송과 원격 실행",
+                  "payload": "SCP release-bundle + SSH command",
+                  "kind": "call"
+                },
+                {
+                  "from": "secret-references",
+                  "to": "ec2-host",
+                  "verb": "운영 설정 주입",
+                  "payload": "secret references only",
+                  "kind": "config",
+                  "check": "secret 값은 diagram과 log에 노출하지 않습니다."
+                },
+                {
+                  "from": "ec2-host",
+                  "to": "deploy-script",
+                  "verb": "script 실행",
+                  "payload": "bash scripts/deploy.sh",
+                  "kind": "call",
+                  "codePointIds": [
+                    "inline-deploy-steps"
+                  ]
+                },
+                {
+                  "from": "deploy-script",
+                  "to": "app-container",
+                  "verb": "app 갱신",
+                  "payload": "docker build + compose up -d",
+                  "kind": "transform",
+                  "check": "DB와 Redis를 불필요하게 내리는 흐름으로 해석하지 않습니다."
+                }
+              ]
+            },
+            {
+              "id": "runtime-verification",
+              "label": "Runtime verification",
+              "description": "배포 명령 종료와 서비스 정상 판정을 분리합니다.",
+              "steps": [
+                {
+                  "from": "verify-job",
+                  "to": "verify-script",
+                  "verb": "원격 검증 실행",
+                  "payload": "bash scripts/check-deploy.sh",
+                  "kind": "call"
+                },
+                {
+                  "from": "verify-script",
+                  "to": "app-container",
+                  "verb": "상태와 로그 확인",
+                  "payload": "docker compose ps + docker logs",
+                  "kind": "compare"
+                },
+                {
+                  "from": "verify-script",
+                  "to": "http-response",
+                  "verb": "응답 확인",
+                  "payload": "curl http://localhost:8080/",
+                  "kind": "request"
+                },
+                {
+                  "from": "http-response",
+                  "to": "workflow-result",
+                  "verb": "성공 판정",
+                  "payload": "compose + log + HTTP passed",
+                  "kind": "response"
+                }
+              ]
+            }
+          ]
+        },
         "snapshot": [
           {
             "label": "Workflow",
@@ -55,6 +313,54 @@ window.visualLabData = {
           "deploy job",
           "verify job"
         ],
+        "diagram": {
+          "caption": "build job이 실패하면 artifact가 없고 needs gate가 deploy와 verify를 blocked 상태로 남깁니다.",
+          "lanes": [
+            {
+              "id": "build-blocked",
+              "label": "Build gate",
+              "description": "처음 실패한 build step에서 원인 분석을 시작합니다.",
+              "steps": [
+                {
+                  "from": "git-trigger",
+                  "to": "github-actions",
+                  "verb": "workflow 시작",
+                  "payload": "push | workflow_dispatch",
+                  "kind": "request"
+                },
+                {
+                  "from": "github-actions",
+                  "to": "build-job",
+                  "verb": "test와 build 실행",
+                  "payload": "./gradlew test bootJar",
+                  "kind": "call"
+                },
+                {
+                  "from": "build-job",
+                  "to": "build-failure",
+                  "verb": "첫 실패 기록",
+                  "payload": "test 또는 bootJar failure",
+                  "kind": "failure",
+                  "check": "실패한 step과 log를 먼저 확인합니다."
+                }
+              ]
+            }
+          ],
+          "notReached": [
+            {
+              "label": "release-bundle",
+              "reason": "build가 실패해 artifact를 업로드하지 못했습니다."
+            },
+            {
+              "label": "deploy job",
+              "reason": "needs: build 조건이 충족되지 않아 blocked 상태입니다."
+            },
+            {
+              "label": "verify job",
+              "reason": "deploy가 실행되지 않았으므로 검증도 시작되지 않습니다."
+            }
+          ]
+        },
         "snapshot": [
           {
             "label": "첫 실패",
@@ -85,6 +391,60 @@ window.visualLabData = {
           "EC2 Runtime",
           "verify job"
         ],
+        "diagram": {
+          "caption": "artifact 생성과 서버 갱신은 별도 책임이며, deploy가 실패하면 verify gate는 열리지 않습니다.",
+          "lanes": [
+            {
+              "id": "deploy-blocked",
+              "label": "Artifact transfer → Deploy gate",
+              "description": "검증된 bundle이 있어도 원격 갱신 실패는 별도로 진단합니다.",
+              "steps": [
+                {
+                  "from": "build-job",
+                  "to": "release-bundle",
+                  "verb": "artifact 업로드",
+                  "payload": "release-bundle",
+                  "kind": "transform"
+                },
+                {
+                  "from": "release-bundle",
+                  "to": "deploy-job",
+                  "verb": "artifact 다운로드",
+                  "payload": "needs: build passed",
+                  "kind": "call"
+                },
+                {
+                  "from": "deploy-job",
+                  "to": "ec2-host",
+                  "verb": "전송과 원격 실행",
+                  "payload": "SCP + SSH",
+                  "kind": "call"
+                },
+                {
+                  "from": "ec2-host",
+                  "to": "deploy-script",
+                  "verb": "갱신 script 실행",
+                  "payload": "scripts/deploy.sh",
+                  "kind": "call"
+                },
+                {
+                  "from": "deploy-script",
+                  "to": "deploy-failure",
+                  "verb": "서버 갱신 중단",
+                  "payload": "image build 또는 compose failure",
+                  "kind": "failure",
+                  "check": "deploy step log에서 첫 실패 명령을 확인합니다."
+                }
+              ]
+            }
+          ],
+          "notReached": [
+            {
+              "label": "verify job",
+              "reason": "needs: deploy 조건이 충족되지 않아 실행되지 않습니다."
+            }
+          ]
+        },
         "snapshot": [
           {
             "label": "Deploy",
@@ -116,6 +476,60 @@ window.visualLabData = {
           "check-deploy.sh",
           "배포 성공 판정"
         ],
+        "diagram": {
+          "caption": "container 갱신이 끝나도 compose 상태, log, HTTP 증거 중 하나가 실패하면 배포 성공 판정을 보류합니다.",
+          "lanes": [
+            {
+              "id": "verify-warning",
+              "label": "Deploy passed → Verify failed",
+              "description": "deploy 완료와 서비스 정상 상태를 서로 다른 gate로 봅니다.",
+              "steps": [
+                {
+                  "from": "release-bundle",
+                  "to": "deploy-job",
+                  "verb": "배포 입력 전달",
+                  "payload": "release-bundle",
+                  "kind": "call"
+                },
+                {
+                  "from": "deploy-job",
+                  "to": "app-container",
+                  "verb": "app 갱신 완료",
+                  "payload": "scripts/deploy.sh",
+                  "kind": "transform"
+                },
+                {
+                  "from": "deploy-job",
+                  "to": "verify-job",
+                  "verb": "verify gate 개방",
+                  "payload": "needs: deploy passed",
+                  "kind": "call"
+                },
+                {
+                  "from": "verify-job",
+                  "to": "verify-script",
+                  "verb": "증거 수집",
+                  "payload": "compose ps + logs + HTTP",
+                  "kind": "compare"
+                },
+                {
+                  "from": "verify-script",
+                  "to": "verify-failure",
+                  "verb": "성공 판정 중단",
+                  "payload": "one or more checks failed",
+                  "kind": "failure",
+                  "check": "실패한 첫 검증 항목과 runtime log를 연결합니다."
+                }
+              ]
+            }
+          ],
+          "notReached": [
+            {
+              "label": "Workflow success",
+              "reason": "verify 증거가 모두 통과하지 않아 배포 완료로 확정하지 않습니다."
+            }
+          ]
+        },
         "snapshot": [
           {
             "label": "Verify",
