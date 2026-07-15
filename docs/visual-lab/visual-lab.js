@@ -1,4 +1,6 @@
 (function () {
+  "use strict";
+
   const data = window.visualLabData || {};
   const app = document.getElementById("app");
 
@@ -6,176 +8,47 @@
     return;
   }
 
-  const sections = [
-    ["overview", "Overview"],
-    ["why", "Why"],
-    ["mental-model", "Before / After"],
-    ["flow", "Flow"],
-    ["code", "Code Points"],
-    ["object-flow", "Object Flow"],
-    ["responsibilities", "Responsibilities"],
-    ["concepts", "Concepts"],
-    ["terminology", "Terminology"],
-    ["practical", "Practical Points"],
-    ["references", "References"],
-    ["checklist", "Checklist"],
-    ["next", "Next"],
-  ];
-
-  const state = {
-    sequenceId: "",
-    flowIndex: 0,
-    stepIndex: 0,
-    isPlaying: false,
-    speedIndex: 0,
-    timerId: 0,
-  };
-
+  const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
   const playbackSpeeds = [
     { label: "1x", ms: 2400 },
     { label: "1.5x", ms: 1600 },
     { label: "2x", ms: 1000 },
   ];
-
-  const actorKindLabels = {
-    person: "사람",
-    client: "클라이언트",
-    browser: "브라우저",
-    "external-auth": "외부 인증",
-    server: "서버",
-    logic: "서버 로직",
-    db: "DB",
-    cache: "Cache",
-    queue: "Queue",
-    mail: "SMTP",
-    ci: "CI/CD",
-    infra: "Infra",
+  const kindLabels = {
+    request: "요청 검사기",
+    "request-trace": "요청 패킷 추적",
+    persistence: "영속성 경계",
+    gate: "실패 차단 경계",
+    auth: "인증·인가 경계",
+    trust: "신뢰 경계",
+    test: "테스트 하네스",
+    cache: "캐시 상태 검사기",
+    realtime: "연결·브로드캐스트 콘솔",
+    runtime: "실행 환경 경계",
+    pipeline: "배포 파이프라인 게이트",
+    refactor: "동작 보존 지도",
+    event: "이벤트 전달 추적",
+    trace: "학습 신호 추적",
   };
-
-  const officialReferences = {
-    "00": [
-      { label: "MDN HTTP", href: "https://developer.mozilla.org/docs/Web/HTTP", reason: "HTTP 메서드, 상태 코드, 요청/응답 기본기를 확인합니다." },
-      { label: "MDN JSON", href: "https://developer.mozilla.org/docs/Learn/JavaScript/Objects/JSON", reason: "JSON body와 응답 구조를 읽는 기준입니다." },
-      { label: "Git Documentation", href: "https://git-scm.com/doc", reason: "clone, branch, commit 흐름을 공식 문서로 확인합니다." },
-    ],
-    "01": [
-      { label: "Spring Web MVC", href: "https://docs.spring.io/spring-framework/reference/web/webmvc.html", reason: "Controller와 HTTP 요청 매핑 흐름의 기준 문서입니다." },
-      { label: "Spring Boot Reference", href: "https://docs.spring.io/spring-boot/index.html", reason: "Spring Boot 애플리케이션 구조와 실행 기준입니다." },
-    ],
-    "02": [
-      { label: "Spring Data JPA", href: "https://docs.spring.io/spring-data/jpa/reference/", reason: "Repository 기반 DB 접근 흐름을 확인합니다." },
-      { label: "Spring Boot Data Access", href: "https://docs.spring.io/spring-boot/reference/data/index.html", reason: "Spring Boot의 데이터 접근 설정 기준입니다." },
-      { label: "MySQL Documentation", href: "https://dev.mysql.com/doc/", reason: "MySQL 저장소와 SQL 기본 동작의 공식 기준입니다." },
-    ],
-    "03": [
-      { label: "Spring Validation", href: "https://docs.spring.io/spring-framework/reference/core/validation/beanvalidation.html", reason: "Bean Validation 연동과 검증 흐름을 확인합니다." },
-      { label: "Jakarta Bean Validation", href: "https://jakarta.ee/specifications/bean-validation/", reason: "검증 annotation의 표준 기준입니다." },
-    ],
-    "04": [
-      { label: "Spring Security", href: "https://docs.spring.io/spring-security/reference/", reason: "인증 필터와 보호 API 흐름을 확인합니다." },
-      { label: "JWT RFC 7519", href: "https://www.rfc-editor.org/rfc/rfc7519", reason: "JWT claim과 token 형식의 표준 문서입니다." },
-    ],
-    "05": [
-      { label: "Spring Security OAuth2 Client", href: "https://docs.spring.io/spring-security/reference/servlet/oauth2/login/index.html", reason: "OAuth2 login과 provider profile 처리 기준입니다." },
-      { label: "Spring Email", href: "https://docs.spring.io/spring-framework/reference/integration/email.html", reason: "Spring 기반 메일 발송 흐름을 확인합니다." },
-      { label: "Google Identity", href: "https://developers.google.com/identity", reason: "Google OAuth profile과 identity 흐름의 공식 기준입니다." },
-    ],
-    "06": [
-      { label: "JUnit 5", href: "https://junit.org/junit5/docs/current/user-guide/", reason: "테스트 구조와 assertion 기준입니다." },
-      { label: "Spring Boot Testing", href: "https://docs.spring.io/spring-boot/reference/testing/", reason: "Spring Boot 테스트 설정과 범위를 확인합니다." },
-      { label: "Mockito", href: "https://site.mockito.org/", reason: "mock 기반 service 테스트의 공식 참고입니다." },
-    ],
-    "07": [
-      { label: "Redis Documentation", href: "https://redis.io/docs/latest/", reason: "Redis key-value 저장과 TTL 기준입니다." },
-      { label: "Spring Data Redis", href: "https://docs.spring.io/spring-data/redis/reference/", reason: "RedisTemplate과 Spring Redis 연동 기준입니다." },
-      { label: "Spring Cache", href: "https://docs.spring.io/spring-framework/reference/integration/cache.html", reason: "캐시 추상화와 cache-aside 사고를 비교합니다." },
-    ],
-    "08": [
-      { label: "Spring WebSocket", href: "https://docs.spring.io/spring-framework/reference/web/websocket.html", reason: "WebSocket과 STOMP 설정 기준입니다." },
-      { label: "MDN WebSocket", href: "https://developer.mozilla.org/docs/Web/API/WebSocket", reason: "브라우저 WebSocket API의 공식 참고입니다." },
-    ],
-    "09": [
-      { label: "Docker Documentation", href: "https://docs.docker.com/", reason: "image, container, compose 실행 단위 기준입니다." },
-      { label: "Spring Boot Container Images", href: "https://docs.spring.io/spring-boot/reference/packaging/container-images/index.html", reason: "Spring Boot 애플리케이션 컨테이너화 기준입니다." },
-    ],
-    "10": [
-      { label: "GitHub Actions", href: "https://docs.github.com/actions", reason: "workflow, job, artifact, secret 사용 기준입니다." },
-      { label: "Spring Boot Gradle Plugin", href: "https://docs.spring.io/spring-boot/gradle-plugin/index.html", reason: "bootJar와 Gradle 빌드 기준입니다." },
-    ],
-    "11": [
-      { label: "Spring Boot Testing", href: "https://docs.spring.io/spring-boot/reference/testing/", reason: "리팩터링 전후 동작 보존을 확인하는 테스트 기준입니다." },
-      { label: "Spring Validation", href: "https://docs.spring.io/spring-framework/reference/core/validation/beanvalidation.html", reason: "검증 책임 분리 기준입니다." },
-    ],
-    "12": [
-      { label: "RabbitMQ Documentation", href: "https://www.rabbitmq.com/docs", reason: "exchange, queue, routing key 기준입니다." },
-      { label: "Spring AMQP", href: "https://docs.spring.io/spring-amqp/reference/", reason: "RabbitTemplate과 listener 설정 기준입니다." },
-      { label: "Spring Application Events", href: "https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events", reason: "Spring 이벤트 사고와 메시징을 비교합니다." },
-    ],
+  const toneLabels = {
+    signal: "진행 중",
+    blocked: "여기서 차단",
+    warning: "주의 필요",
+    recovered: "확인 완료",
   };
+  const state = {
+    scenarioIndex: 0,
+    flowIndex: 0,
+    stepIndex: 0,
+    speedIndex: 0,
+    isPlaying: false,
+    timerId: 0,
+    checked: new Set(),
+  };
+  let sectionObserver = null;
 
-  function normalizeSequences() {
-    if (Array.isArray(data.sequences) && data.sequences.length > 0) {
-      return data.sequences;
-    }
-
-    if (data.kind === "sequence") {
-      return [
-        {
-          ...data,
-          id: data.sequence || "NN",
-          title: data.title || "Visual Lab",
-          question: data.problem || data.goal || "이 시퀀스의 흐름을 어떻게 설명할 수 있을까요?",
-          goal: data.goal || "핵심 흐름을 단계별로 확인합니다.",
-          why: data.why || { problem: data.problem },
-          overview: data.overview || [],
-          actors: data.actors || [],
-          flows: data.flows || [],
-          codePoints: data.codePoints || [],
-          concepts: data.concepts || [],
-          checks: data.checks || data.practice || [],
-          next: data.next || {},
-        },
-      ];
-    }
-
-    return [
-      {
-        id: data.sequence || "NN",
-        title: data.title || "Visual Lab",
-        question: data.problem || data.goal || "이 시퀀스의 흐름을 어떻게 설명할 수 있을까요?",
-        goal: data.goal || "핵심 흐름을 단계별로 확인합니다.",
-        overview: (data.flow || []).map((step) => step.label || step.id).filter(Boolean),
-        flows: [
-          {
-            id: "main-flow",
-            title: "학습 흐름",
-            summary: data.problem || data.goal || "준비된 학습 흐름을 확인합니다.",
-            steps: (data.flow || []).map((step, index) => ({
-              order: index + 1,
-              actor: step.label || "Step",
-              input: step.problem || "",
-              owner: step.concept || "",
-              action: step.action || "",
-              output: step.check || "",
-              note: step.concept || "",
-            })),
-          },
-        ],
-        concepts: data.concepts || [],
-        checks: data.practice || [],
-      },
-    ];
-  }
-
-  const sequences = normalizeSequences();
-
-  function getHashSequenceId() {
-    const match = window.location.hash.match(/^#seq-([0-9]{2})$/);
-    return match ? match[1] : "";
-  }
-
-  function findSequence(id) {
-    return sequences.find((sequence) => sequence.id === id) || sequences[0];
+  function list(value) {
+    return Array.isArray(value) ? value : [];
   }
 
   function createElement(tagName, className, text) {
@@ -184,7 +57,7 @@
       element.className = className;
     }
     if (text !== undefined && text !== null) {
-      element.textContent = text;
+      element.textContent = String(text);
     }
     return element;
   }
@@ -198,252 +71,131 @@
     return element;
   }
 
-  function makeSection(id, eyebrow, title, lede) {
-    const section = createElement("section", "doc-section");
-    section.id = id;
-    const heading = createElement("div", "section-heading");
-    heading.append(
-      createElement("p", "eyebrow", eyebrow),
-      createElement("h2", "", title)
-    );
-    section.appendChild(heading);
-    appendText(section, "p", "lede", lede);
-    return section;
-  }
-
-  function makeLink(label, href) {
-    const anchor = createElement("a", "source-link", label);
-    anchor.href = href;
-    return anchor;
-  }
-
-  function normalizeActorKind(kind) {
-    const value = String(kind || "").trim().toLowerCase();
-    if (value === "user" || value === "human") return "person";
-    if (value === "web" || value === "frontend") return "client";
-    if (value === "auth" || value === "oauth" || value === "external") return "external-auth";
-    if (value === "service" || value === "internal" || value === "component") return "logic";
-    if (value === "database" || value === "mysql" || value === "postgres") return "db";
-    if (value === "redis") return "cache";
-    if (value === "broker" || value === "event") return "queue";
-    if (value === "smtp" || value === "email") return "mail";
-    if (value === "cicd" || value === "pipeline") return "ci";
-    if (actorKindLabels[value]) return value;
-    return "logic";
-  }
-
-  function inferActorKind(name) {
-    const value = String(name || "").toLowerCase();
-    if (/user|사용자|student|client/.test(value)) return value.includes("client") ? "client" : "person";
-    if (/browser|postman|swagger|frontend|client|브라우저/.test(value)) return "client";
-    if (/google|oauth|external|provider/.test(value)) return "external-auth";
-    if (/controller|api|server/.test(value)) return "server";
-    if (/service|handler|filter|validation|repository|dto|entity|response|fixture|mock/.test(value)) return "logic";
-    if (/mysql|db|database|table|repository/.test(value)) return "db";
-    if (/redis|cache|ttl/.test(value)) return "cache";
-    if (/queue|rabbit|broker|event|consumer|publisher/.test(value)) return "queue";
-    if (/mail|smtp|email/.test(value)) return "mail";
-    if (/github|actions|workflow|ci|deploy|verify/.test(value)) return "ci";
-    if (/docker|container|runtime|infra|ec2|compose|jar/.test(value)) return "infra";
-    return "logic";
-  }
-
-  function actorKey(actor) {
-    return String(actor.id || actor.label || actor.name || "").toLowerCase();
-  }
-
-  function actorLabel(actor) {
-    return actor.label || actor.name || actor.id || "Actor";
-  }
-
-  function actorMeta(value, declaredActors) {
-    const key = String(value || "").toLowerCase();
-    const found = declaredActors.find((actor) => actorKey(actor) === key || String(actorLabel(actor)).toLowerCase() === key);
-    if (found) {
-      return {
-        id: found.id || actorLabel(found),
-        label: actorLabel(found),
-        kind: normalizeActorKind(found.kind),
-      };
-    }
-    return {
-      id: value || "actor",
-      label: value || "Actor",
-      kind: inferActorKind(value),
-    };
-  }
-
-  function collectActors(sequence, flow) {
-    const declared = Array.isArray(sequence.actors) ? sequence.actors : [];
-    const actors = [];
-    const seen = new Set();
-
-    function add(value) {
-      const meta = actorMeta(value, declared);
-      const key = String(meta.id || meta.label).toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        actors.push(meta);
-      }
-    }
-
-    declared.forEach((actor) => add(actor.id || actor.label || actor.name));
-    (flow.steps || []).forEach((step) => {
-      add(step.from || step.actor);
-      add(step.to || step.owner);
-    });
-
-    return actors;
-  }
-
-  function inferMessageKind(flow, step) {
-    const raw = String(step.messageKind || step.kind || flow.messageKind || "").toLowerCase();
-    if (["request", "response", "event", "error"].includes(raw)) return raw;
-    const text = `${flow.title || ""} ${step.action || ""} ${step.output || ""}`.toLowerCase();
-    if (/fail|error|예외|실패|invalid/.test(text)) return "error";
-    if (/event|publish|consume|broadcast|queue|메시지|이벤트/.test(text)) return "event";
-    if (/response|return|응답|결과|output/.test(text)) return "response";
-    return "request";
-  }
-
-  function getCodePoints(sequence) {
-    return Array.isArray(sequence.codePoints) ? sequence.codePoints : [];
-  }
-
-  function normalizeSnippet(snippet) {
-    return String(snippet || "").trim();
-  }
-
-  function inferCodeLanguage(codePoint) {
-    const explicit = String(codePoint.language || "").trim().toLowerCase();
-    if (explicit) {
-      return explicit;
-    }
-
-    const file = String(codePoint.file || "").toLowerCase();
-    if (file.includes("src/main/kotlin") || file.includes("src/test/kotlin") || /\.kt\b/.test(file)) {
-      return "kotlin";
-    }
-
-    return "text";
-  }
-
-  const kotlinTokenPattern = /\/\*[\s\S]*?\*\/|\/\/[^\n]*|"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])'|@[A-Za-z_][A-Za-z0-9_.]*(?:\([^()\n]*\))?|\b(?:abstract|actual|annotation|as|break|by|catch|class|companion|const|constructor|continue|crossinline|data|do|dynamic|else|enum|expect|external|false|field|file|final|finally|for|fun|get|if|import|in|infix|init|inline|inner|interface|internal|is|lateinit|noinline|null|object|open|operator|out|override|package|param|private|property|protected|public|receiver|reified|return|sealed|set|setparam|suspend|tailrec|this|throw|true|try|typealias|typeof|val|var|vararg|when|where|while)\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[uUlLfF]*\b|\b[A-Z][A-Za-z0-9_]*\b/g;
-
-  function kotlinTokenClass(token) {
-    if (token.startsWith("//") || token.startsWith("/*")) {
-      return "kt-token-comment";
-    }
-    if (token.startsWith("\"") || token.startsWith("'")) {
-      return "kt-token-string";
-    }
-    if (token.startsWith("@")) {
-      return "kt-token-annotation";
-    }
-    if (/^\d/.test(token)) {
-      return "kt-token-number";
-    }
-    if (/^[A-Z]/.test(token)) {
-      return "kt-token-type";
-    }
-    return "kt-token-keyword";
-  }
-
-  function appendToken(parent, className, text) {
-    const token = createElement("span", className);
-    token.textContent = text;
-    parent.appendChild(token);
-  }
-
-  function appendKotlinHighlightedCode(parent, snippet) {
-    let cursor = 0;
-    kotlinTokenPattern.lastIndex = 0;
-
-    snippet.replace(kotlinTokenPattern, (match, offset) => {
-      if (offset > cursor) {
-        parent.appendChild(document.createTextNode(snippet.slice(cursor, offset)));
-      }
-      appendToken(parent, kotlinTokenClass(match), match);
-      cursor = offset + match.length;
-      return match;
-    });
-
-    if (cursor < snippet.length) {
-      parent.appendChild(document.createTextNode(snippet.slice(cursor)));
-    }
-  }
-
-  function makeCodePointCard(codePoint, compact) {
-    const card = createElement("figure", compact ? "code-point-card is-compact" : "code-point-card");
-    const language = inferCodeLanguage(codePoint);
-    const header = createElement("figcaption", "");
-    const title = createElement("strong", "", codePoint.title || "핵심 코드 포인트");
-    const meta = createElement("span", "", `${codePoint.file || "파일 경로 준비 중"} · ${language}`);
-    header.append(title, meta);
-
-    const pre = createElement("pre", "code-box");
-    const code = createElement("code", `language-${language}`);
-    const snippet = normalizeSnippet(codePoint.snippet) || "// 핵심 코드 조각을 준비 중입니다.";
-    if (language === "kotlin") {
-      appendKotlinHighlightedCode(code, snippet);
-    } else {
-      code.textContent = snippet;
-    }
-    pre.appendChild(code);
-
-    const body = createElement("div", "code-point-body");
-    appendText(body, "p", "", codePoint.explanation);
-    appendText(body, "p", "code-check", codePoint.check);
-
-    card.append(header, pre, body);
-    return card;
-  }
-
-  function stepCodePoints(sequence, step) {
-    const codePoints = getCodePoints(sequence);
-    const ids = Array.isArray(step.codePointIds) ? step.codePointIds : [];
-    const selected = ids
-      .map((id) => codePoints.find((point) => point.id === id))
-      .filter(Boolean);
-
-    if (selected.length > 0) {
-      return selected;
-    }
-
-    return codePoints.slice(0, 2);
+  function makeLink(label, href, className) {
+    const link = createElement("a", className || "text-link", label);
+    link.href = href;
+    return link;
   }
 
   function currentSequence() {
-    return findSequence(state.sequenceId);
+    if (data.kind === "sequence") {
+      return {
+        ...data,
+        id: data.sequence || "NN",
+        question: data.question || data.problem || data.goal,
+        checks: list(data.checks).length ? data.checks : data.practice,
+      };
+    }
+    return null;
+  }
+
+  function flowIndexById(sequence, flowId) {
+    const flows = list(sequence.flows);
+    const index = flows.findIndex((flow) => flow.id === flowId);
+    return index >= 0 ? index : 0;
   }
 
   function currentFlow(sequence) {
-    const flows = Array.isArray(sequence.flows) ? sequence.flows : [];
-    return flows[state.flowIndex] || flows[0] || { title: "학습 흐름", steps: [] };
+    return list(sequence.flows)[state.flowIndex] || list(sequence.flows)[0] || { steps: [] };
   }
 
-  function getObjectFlow(sequence) {
-    if (Array.isArray(sequence.objectFlow) && sequence.objectFlow.length > 0) {
-      return sequence.objectFlow;
+  function currentSteps(sequence) {
+    return list(currentFlow(sequence).steps);
+  }
+
+  function currentStep(sequence) {
+    return currentSteps(sequence)[state.stepIndex] || {};
+  }
+
+  function deriveRoute(flow) {
+    const route = [];
+    list(flow.steps).forEach((step) => {
+      const from = step.from || step.actor;
+      const to = step.to || step.owner;
+      if (from && route[route.length - 1] !== from) {
+        route.push(from);
+      }
+      if (to && route[route.length - 1] !== to) {
+        route.push(to);
+      }
+    });
+    return route;
+  }
+
+  function normalizedWorkbench(sequence) {
+    if (sequence.workbench && list(sequence.workbench.scenarios).length) {
+      return sequence.workbench;
     }
 
-    return (sequence.overview || []).map((item, index) => ({
-      name: item,
-      type: index === 0 ? "Start" : index === (sequence.overview || []).length - 1 ? "Result" : "Boundary",
-      layer: index === 0 ? "Input" : index === (sequence.overview || []).length - 1 ? "Output" : "Flow",
-    }));
+    return {
+      kind: "trace",
+      title: "핵심 흐름 추적",
+      instruction: "흐름을 선택하고 단계별 책임과 확인 지점을 따라가세요.",
+      scenarios: list(sequence.flows).map((flow, index) => ({
+        id: flow.id || `flow-${index + 1}`,
+        label: flow.title || `흐름 ${index + 1}`,
+        flowId: flow.id,
+        tone: "signal",
+        prompt: flow.summary || sequence.problem,
+        route: deriveRoute(flow),
+        snapshot: [
+          { label: "현재 흐름", value: flow.title || `흐름 ${index + 1}` },
+          { label: "관찰 단계", value: `${list(flow.steps).length}개 단계` },
+        ],
+        evidence: flow.summary || sequence.goal,
+        outcome: "단계를 선택해 Problem, Concept, Action, Check를 확인합니다.",
+      })),
+    };
   }
 
-  function getReferences(sequence) {
-    if (Array.isArray(sequence.references) && sequence.references.length > 0) {
-      return sequence.references;
+  function currentScenario(sequence) {
+    const workbench = normalizedWorkbench(sequence);
+    return list(workbench.scenarios)[state.scenarioIndex] || list(workbench.scenarios)[0] || {};
+  }
+
+  function scenarioRoute(sequence, scenario) {
+    const route = list(scenario.route);
+    if (route.length) {
+      return route.map((item) => (typeof item === "string" ? { label: item } : item));
     }
-
-    return officialReferences[sequence.id] || [];
+    return deriveRoute(currentFlow(sequence)).map((label) => ({ label }));
   }
 
-  function currentSpeed() {
-    return playbackSpeeds[state.speedIndex] || playbackSpeeds[0];
+  function linkedCodePoints(sequence, step) {
+    const ids = list(step.codePointIds);
+    const points = list(sequence.codePoints);
+    if (!ids.length) {
+      return points.slice(0, 2);
+    }
+    return ids.map((id) => points.find((point) => point.id === id)).filter(Boolean);
+  }
+
+  function collectSourceLinks(sequence) {
+    const links = [];
+    const source = sequence.source || {};
+    [
+      ["이론 정리", source.theory],
+      ["구현 안내", source.implementation],
+      ["체크리스트", source.checklist],
+    ].forEach(([label, href]) => {
+      if (href) {
+        links.push({ label, href });
+      }
+    });
+    [...list(sequence.sourceDocs), ...list(sequence.relatedDocs)].forEach((item) => {
+      if (item && item.label && item.href) {
+        links.push(item);
+      }
+    });
+    const seen = new Set();
+    return links.filter((item) => {
+      const key = `${item.label}:${item.href}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
   }
 
   function clearPlaybackTimer() {
@@ -453,641 +205,603 @@
     }
   }
 
-  function schedulePlayback() {
+  function schedulePlayback(sequence) {
     clearPlaybackTimer();
-
-    if (!state.isPlaying) {
+    const steps = currentSteps(sequence);
+    if (!state.isPlaying || motionQuery.matches || steps.length <= 1) {
       return;
     }
-
-    const steps = currentFlow(currentSequence()).steps || [];
-    if (state.stepIndex >= steps.length - 1) {
-      state.isPlaying = false;
-      return;
-    }
-
     state.timerId = window.setTimeout(() => {
-      state.stepIndex = Math.min(steps.length - 1, state.stepIndex + 1);
       if (state.stepIndex >= steps.length - 1) {
         state.isPlaying = false;
+        render({ focusKey: "play" });
+        return;
       }
-      render();
-    }, currentSpeed().ms);
+      state.stepIndex += 1;
+      render({ focusKey: "play" });
+    }, playbackSpeeds[state.speedIndex].ms);
   }
 
-  function setDocumentTitle(sequence) {
-    const repoName = data.repo && data.repo.name ? data.repo.name : "A&I Code Lab";
-    document.title = `${sequence.id} ${sequence.title} | ${repoName} Visual Lab`;
-  }
-
-  function renderTopbar(root) {
-    const topbar = createElement("header", "topbar");
-    const inner = createElement("div", "topbar-inner");
-    const brand = createElement("div", "brand-lockup");
-    brand.append(
-      createElement("div", "brand-title", "A&I Code Lab"),
-      createElement("div", "brand-subtitle", "Visual Lab")
+  function renderTopbar(root, sequence) {
+    const header = createElement("header", "context-bar");
+    const inner = createElement("div", "context-bar__inner");
+    const homeHref = data.kind === "sequence" ? "../../index.html" : "./index.html";
+    const brand = makeLink("A&I Backend · Visual Lab", homeHref, "brand-mark");
+    const context = createElement("div", "context-meta");
+    const repoName = (data.repo && data.repo.name) || data.title || "Topic Repository";
+    context.append(
+      createElement("span", "context-meta__repo", repoName),
+      createElement("span", "context-meta__mode", sequence ? `Sequence ${sequence.id}` : "학습 경로")
     );
-    const repoName = data.repo && data.repo.name ? data.repo.name : data.title || "Topic Repository";
-    const repoGroup = data.sequence ? `Sequence ${data.sequence}` : "Sequence";
-    const repo = createElement("div", "repo-label", `${repoName} · ${repoGroup}`);
-    inner.append(brand, repo);
-    topbar.appendChild(inner);
-    root.appendChild(topbar);
+    inner.append(brand, context);
+    header.appendChild(inner);
+    root.appendChild(header);
   }
 
-  function renderSequenceSwitcher(root) {
-    const bar = createElement("nav", "sequence-bar");
-    bar.setAttribute("aria-label", "Sequence switcher");
-    const switcher = createElement("div", "sequence-switcher");
+  function renderHub(root) {
+    renderTopbar(root, null);
+    const main = createElement("main", "hub-shell");
+    main.id = "main-content";
 
-    sequences.forEach((sequence) => {
-      const button = createElement("button", "sequence-tab", `${sequence.id} ${sequence.title}`);
-      button.type = "button";
-      button.setAttribute("aria-pressed", String(sequence.id === state.sequenceId));
-      button.setAttribute("aria-label", `${sequence.id} ${sequence.title} 시퀀스 보기`);
-      if (sequence.id === state.sequenceId) {
-        button.classList.add("is-active");
-      }
-      button.addEventListener("click", () => {
-        state.sequenceId = sequence.id;
-        state.flowIndex = 0;
-        state.stepIndex = 0;
-        window.location.hash = `seq-${sequence.id}`;
-        render();
-      });
-      switcher.appendChild(button);
+    const intro = createElement("header", "hub-intro");
+    intro.append(
+      createElement("p", "eyebrow", "Repository learning path"),
+      createElement("h1", "hub-title", data.title || "A&I Backend Visual Lab"),
+      createElement("p", "hub-description", data.description || "시퀀스를 선택해 실제 시스템 흐름을 관찰합니다.")
+    );
+    const job = createElement("p", "hub-job", "질문을 선택하고, 시스템 경로를 관찰하고, 다음 판단으로 이동하세요.");
+    intro.appendChild(job);
+    main.appendChild(intro);
+
+    const journey = createElement("ol", "journey-list");
+    list(data.sequences).forEach((sequence) => {
+      const item = createElement("li", "journey-item");
+      const link = makeLink("", sequence.href || `./sequences/${sequence.sequence || sequence.id}/index.html`, "journey-link");
+      const identity = createElement("div", "journey-identity");
+      identity.append(
+        createElement("span", "sequence-index", sequence.sequence || sequence.id),
+        createElement("span", "journey-topic", sequence.topic || "Backend sequence")
+      );
+      const copy = createElement("div", "journey-copy");
+      copy.append(
+        createElement("h2", "", sequence.title || "Visual Lab"),
+        createElement("p", "", sequence.summary || sequence.goal || "핵심 흐름을 확인합니다.")
+      );
+      link.append(identity, copy, createElement("span", "journey-action", "학습 시작 →"));
+      item.appendChild(link);
+      journey.appendChild(item);
     });
-
-    bar.appendChild(switcher);
-    root.appendChild(bar);
+    main.appendChild(journey.childNodes.length ? journey : createElement("p", "empty-state", "연결된 시퀀스가 없습니다. 허브 데이터를 확인하세요."));
+    root.appendChild(main);
   }
 
-  function renderSectionNav(layout) {
-    const nav = createElement("nav", "section-nav");
-    nav.setAttribute("aria-label", "Section navigation");
+  function renderHero(main, sequence) {
+    const hero = createElement("header", "sequence-hero");
+    hero.id = "question";
+    const identity = createElement("div", "sequence-identity");
+    identity.append(
+      createElement("span", "sequence-index sequence-index--large", sequence.id),
+      createElement("div", "sequence-name")
+    );
+    const name = identity.querySelector(".sequence-name");
+    name.append(
+      createElement("p", "eyebrow", sequence.subtitle || sequence.topic || "Backend sequence"),
+      createElement("p", "sequence-title", sequence.title || "Visual Lab")
+    );
 
-    sections.forEach(([id, label], index) => {
-      const link = createElement("a", "section-link", label);
-      link.href = `#${id}`;
+    const thesis = createElement("div", "sequence-thesis");
+    thesis.append(
+      createElement("p", "thesis-label", "이번 시퀀스의 질문"),
+      createElement("h1", "", sequence.question || sequence.problem || sequence.title),
+      createElement("p", "sequence-goal", sequence.goal || "핵심 흐름을 단계별로 확인합니다.")
+    );
+    hero.append(identity, thesis);
+    main.appendChild(hero);
+  }
+
+  function renderLearningNav(main) {
+    const nav = createElement("nav", "learning-nav");
+    nav.setAttribute("aria-label", "학습 판단 단계");
+    [
+      ["question", "질문"],
+      ["lab", "관찰"],
+      ["evidence", "개념·코드"],
+      ["verify", "검증"],
+      ["next", "다음 질문"],
+    ].forEach(([id, label], index) => {
+      const link = makeLink(label, `#${id}`, "learning-nav__link");
+      link.dataset.sectionLink = id;
       if (index === 0) {
-        link.classList.add("is-active");
+        link.setAttribute("aria-current", "location");
       }
       nav.appendChild(link);
     });
-
-    layout.appendChild(nav);
+    main.appendChild(nav);
   }
 
-  function renderHero(stack, sequence) {
-    const hero = createElement("section", "hero");
-    hero.id = "overview";
-    hero.append(
-      createElement("p", "eyebrow", `Sequence ${sequence.id}`),
-      createElement("h1", "", sequence.title || data.title || "Visual Lab")
-    );
-    appendText(hero, "p", "question", sequence.question);
-    appendText(hero, "p", "goal", sequence.goal || data.goal);
-
-    const sourceLinks = createElement("div", "source-links");
-    const source = sequence.source || {};
-    const sourceItems = [
-      ["Theory", source.theory],
-      ["Implementation", source.implementation],
-      ["Checklist", source.checklist],
-    ].filter((item) => item[1]);
-
-    if (sourceItems.length === 0 && Array.isArray(sequence.sourceDocs)) {
-      sequence.sourceDocs.forEach((item) => {
-        if (item.href && item.label) {
-          sourceLinks.appendChild(makeLink(item.label, item.href));
-        }
-      });
-    } else {
-      sourceItems.forEach(([label, href]) => sourceLinks.appendChild(makeLink(label, href)));
+  function routeState(index, routeLength, scenario, stepLength) {
+    if (Number.isInteger(scenario.stopAfter) && index > scenario.stopAfter) {
+      return "blocked";
     }
-
-    if (sourceLinks.childNodes.length > 0) {
-      hero.appendChild(sourceLinks);
+    const mappedActiveIndex = stepLength <= 1
+      ? Math.max(routeLength - 1, 0)
+      : Math.round((state.stepIndex / (stepLength - 1)) * Math.max(routeLength - 1, 0));
+    const reachableLastIndex = Number.isInteger(scenario.stopAfter)
+      ? Math.min(scenario.stopAfter, Math.max(routeLength - 1, 0))
+      : Math.max(routeLength - 1, 0);
+    const activeIndex = Math.min(mappedActiveIndex, reachableLastIndex);
+    if (index < activeIndex) {
+      return "passed";
     }
-
-    stack.appendChild(hero);
+    if (index === activeIndex) {
+      return "active";
+    }
+    return "pending";
   }
 
-  function renderWhy(stack, sequence) {
-    const why = sequence.why || {};
-    const section = makeSection("why", "Why", "왜 이 시퀀스를 배우는가", why.problem);
-    const grid = createElement("div", "card-grid");
-
-    (why.limits || []).forEach((limit, index) => {
-      const card = createElement("article", "info-card summary-box");
-      card.append(
-        createElement("h3", "", `한계 ${index + 1}`),
-        createElement("p", "", limit)
-      );
-      grid.appendChild(card);
-    });
-
-    if (why.choice) {
-      const card = createElement("article", "info-card summary-box");
-      card.append(createElement("h3", "", "이번 선택"), createElement("p", "", why.choice));
-      grid.appendChild(card);
-    }
-
-    section.appendChild(grid.childNodes.length ? grid : createElement("p", "empty-state", "문제 배경을 준비 중입니다."));
-    stack.appendChild(section);
+  function routeStateLabel(routeStateName) {
+    return {
+      passed: "지남",
+      active: "현재 관찰",
+      pending: "다음",
+      blocked: "도달하지 않음",
+    }[routeStateName];
   }
 
-  function renderMentalModel(stack, sequence) {
-    const model = sequence.mentalModel || {};
-    const why = sequence.why || {};
-    const before = model.before || (why.limits && why.limits[0]) || "기존 방식의 한계를 먼저 확인합니다.";
-    const after = model.after || why.choice || "이번 시퀀스에서 선택한 책임 분리 기준을 확인합니다.";
-    const section = makeSection("mental-model", "Before / After", "사고방식 전환", "이 시퀀스를 지나며 무엇을 다르게 보게 되는지 비교합니다.");
-    const grid = createElement("div", "mental-grid");
-    [
-      ["Before", before],
-      ["After", after],
-    ].forEach(([label, text]) => {
-      const card = createElement("article", "mental-card");
-      card.append(createElement("span", "mental-label", label), createElement("p", "", text));
-      grid.appendChild(card);
-    });
-    section.appendChild(grid);
-    stack.appendChild(section);
-  }
-
-  function renderOverviewLine(section, sequence) {
-    const overview = Array.isArray(sequence.overview) ? sequence.overview : [];
-    if (overview.length === 0) {
-      section.appendChild(createElement("p", "empty-state", "핵심 흐름을 준비 중입니다."));
-      return;
-    }
-
-    const line = createElement("div", "overview-line");
-    overview.forEach((item, index) => {
-      line.appendChild(createElement("span", "overview-node", item));
-      if (index < overview.length - 1) {
-        line.appendChild(createElement("span", "overview-arrow", "->"));
-      }
-    });
-    section.appendChild(line);
-  }
-
-  function renderActorDiagram(parent, flow, sequence) {
-    const steps = Array.isArray(flow.steps) ? flow.steps : [];
-    if (steps.length === 0) {
-      return;
-    }
-
-    const actors = collectActors(sequence, flow);
-
-    const panel = createElement("div", "actor-diagram");
-    panel.appendChild(createElement("h3", "", "Sequence Diagram"));
-    const bandKind = flow.bandKind || (/fail|error|실패|예외/.test(String(flow.title || "").toLowerCase()) ? "case" : "scenario");
-    const band = createElement("div", `diagram-band ${bandKind}`, flow.title || "Scenario");
-    if (flow.summary) {
-      band.setAttribute("title", flow.summary);
-    }
-    panel.appendChild(band);
-
-    const diagram = createElement("div", "sequence-diagram diagram-board");
-    diagram.style.setProperty("--lane-count", String(Math.max(actors.length, 1)));
-
-    const lanes = createElement("div", "sequence-participants diagram-actor-row");
-    actors.forEach((actor) => {
-      const lane = createElement("div", "sequence-participant diagram-actor");
-      lane.classList.add(`is-${actor.kind}`);
-      const icon = createElement("span", `diagram-actor-icon is-${actor.kind}`, "");
-      icon.setAttribute("aria-hidden", "true");
-      const text = createElement("span", "diagram-actor-text");
-      text.append(createElement("strong", "", actor.label), createElement("small", "", actorKindLabels[actor.kind] || actor.kind));
-      lane.append(icon, text);
-      lanes.appendChild(lane);
-    });
-    diagram.appendChild(lanes);
-
-    const messages = createElement("ol", "sequence-messages");
-    steps.forEach((step, index) => {
-      const fromMeta = actorMeta(step.from || step.actor || actorLabel(actors[0]), actors);
-      const toMeta = actorMeta(step.to || step.owner || step.actor || actorLabel(actors[Math.min(index + 1, actors.length - 1)]), actors);
-      const from = Math.max(actors.findIndex((actor) => actor.label === fromMeta.label || actor.id === fromMeta.id), 0) + 1;
-      const to = Math.max(actors.findIndex((actor) => actor.label === toMeta.label || actor.id === toMeta.id), 0) + 1;
-      const start = Math.min(from, to);
-      const span = Math.max(Math.abs(to - from) + 1, 1);
-      const messageKind = inferMessageKind(flow, step);
-      const item = createElement("li", "sequence-row");
-      item.style.setProperty("--lane-count", String(Math.max(actors.length, 1)));
-      if (index === state.stepIndex) {
-        item.classList.add("is-active");
-      }
-
-      actors.forEach(() => item.appendChild(createElement("span", "sequence-lifeline diagram-lifeline", "")));
-
-      const message = createElement("div", "sequence-message diagram-message");
-      if (index === state.stepIndex) {
-        message.classList.add("is-active");
-      }
-      if (from === to) {
-        message.classList.add("is-self");
-      } else if (from > to) {
-        message.classList.add("is-backward");
-      }
-      message.classList.add(`is-${messageKind}`);
-      message.style.gridColumn = `${start} / span ${span}`;
-      message.append(
-        createElement("span", "message-index", String(index + 1)),
-        createElement("span", "sequence-route", `${fromMeta.label} -> ${toMeta.label}`),
-        createElement("span", "sequence-label", step.message || step.action || step.input || "단계 설명을 준비 중입니다."),
-        createElement("span", "sequence-arrow", "")
-      );
-      item.appendChild(message);
-      messages.appendChild(item);
-    });
-    diagram.appendChild(messages);
-    panel.appendChild(diagram);
-    parent.appendChild(panel);
-  }
-
-  function renderFlow(stack, sequence) {
-    const section = makeSection("flow", "Flow", "핵심 흐름과 시퀀스 다이어그램", "이론 문서의 실행 흐름을 단계별로 눌러 확인합니다.");
-    renderOverviewLine(section, sequence);
-
-    const flows = Array.isArray(sequence.flows) ? sequence.flows : [];
-    if (flows.length === 0) {
-      section.appendChild(createElement("p", "empty-state", "시퀀스 다이어그램 데이터를 준비 중입니다."));
-      stack.appendChild(section);
-      return;
-    }
-
-    const shell = createElement("div", "flow-shell step-explorer support-layout");
-    const tabs = createElement("div", "flow-tabs");
-    flows.forEach((flow, index) => {
-      const button = createElement("button", "flow-tab", flow.title || `Flow ${index + 1}`);
-      button.type = "button";
-      button.setAttribute("aria-pressed", String(index === state.flowIndex));
-      button.setAttribute("aria-label", `${flow.title || `Flow ${index + 1}`} 흐름 보기`);
-      if (index === state.flowIndex) {
-        button.classList.add("is-active");
-      }
-      button.addEventListener("click", () => {
-        state.flowIndex = index;
-        state.stepIndex = 0;
-        render();
-      });
-      tabs.appendChild(button);
-    });
-    shell.appendChild(tabs);
-
+  function renderWorkbench(main, sequence) {
+    const workbench = normalizedWorkbench(sequence);
+    const scenario = currentScenario(sequence);
     const flow = currentFlow(sequence);
-    appendText(shell, "p", "flow-summary", flow.summary);
-    renderActorDiagram(shell, flow, sequence);
+    const steps = currentSteps(sequence);
+    const route = scenarioRoute(sequence, scenario);
 
-    const diagram = createElement("div", "diagram-layout detail-context-layout");
-    const rail = createElement("div", "step-rail");
-    const steps = Array.isArray(flow.steps) ? flow.steps : [];
+    document.body.dataset.labKind = workbench.kind || "trace";
 
-    steps.forEach((step, index) => {
-      const label = step.owner || step.actor || `Step ${index + 1}`;
-      const button = createElement("button", "step-button step-rail-button", `${index + 1}. ${label}`);
+    const section = createElement("section", "lab-section");
+    section.id = "lab";
+    const heading = createElement("header", "section-heading section-heading--lab");
+    heading.append(
+      createElement("p", "eyebrow", kindLabels[workbench.kind] || kindLabels.trace),
+      createElement("h2", "", workbench.title || "학습 신호 추적"),
+      createElement("p", "section-lede", workbench.instruction || "조건을 선택하고 시스템 경로를 관찰하세요.")
+    );
+    section.appendChild(heading);
+
+    const scenarioFieldset = createElement("fieldset", "scenario-selector");
+    scenarioFieldset.appendChild(createElement("legend", "scenario-selector__legend", "관찰 조건 선택"));
+    const scenarioButtons = createElement("div", "scenario-selector__buttons");
+    list(workbench.scenarios).forEach((item, index) => {
+      const button = createElement("button", "scenario-button", item.label || `조건 ${index + 1}`);
       button.type = "button";
-      button.setAttribute("aria-pressed", String(index === state.stepIndex));
-      button.setAttribute("aria-label", `${index + 1}단계 ${label} 보기`);
-      if (index === state.stepIndex) {
+      button.dataset.focusKey = `scenario-${index}`;
+      button.setAttribute("aria-pressed", String(index === state.scenarioIndex));
+      if (index === state.scenarioIndex) {
         button.classList.add("is-active");
       }
       button.addEventListener("click", () => {
-        state.stepIndex = index;
-        render();
+        state.scenarioIndex = index;
+        state.flowIndex = flowIndexById(sequence, item.flowId);
+        state.stepIndex = 0;
+        state.isPlaying = false;
+        render({ focusKey: `scenario-${index}` });
       });
-      rail.appendChild(button);
+      scenarioButtons.appendChild(button);
     });
+    scenarioFieldset.appendChild(scenarioButtons);
+    section.appendChild(scenarioFieldset);
 
-    const selectedStep = steps[state.stepIndex] || {};
-    const detail = createElement("article", "step-detail step-stage");
-    detail.setAttribute("aria-live", "polite");
-    detail.append(
-      createElement("p", "view-label", "Step View"),
-      createElement("p", "step-meta", `Step ${selectedStep.order || state.stepIndex + 1}`),
-      createElement("h3", "", selectedStep.owner || selectedStep.actor || "단계 준비 중")
+    const stage = createElement("div", `workbench workbench--${workbench.kind || "trace"}`);
+    stage.dataset.tone = scenario.tone || "signal";
+    const stageHeader = createElement("div", "workbench__header");
+    const stageTitle = createElement("div", "workbench__title");
+    stageTitle.append(
+      createElement("span", `status-label status-label--${scenario.tone || "signal"}`, toneLabels[scenario.tone] || toneLabels.signal),
+      createElement("h3", "", scenario.label || flow.title || "현재 흐름")
     );
-    appendText(detail, "p", "lede", selectedStep.note);
+    stageHeader.append(stageTitle, createElement("p", "workbench__prompt", scenario.prompt || flow.summary || sequence.problem));
+    stage.appendChild(stageHeader);
 
-    const fields = createElement("dl", "step-fields step-io-grid");
-    [
-      ["Problem", selectedStep.problem || selectedStep.input],
-      ["Concept", selectedStep.concept || selectedStep.owner],
-      ["Action", selectedStep.action],
-      ["Check", selectedStep.check || selectedStep.output],
-      ["From", selectedStep.actor || selectedStep.from],
-      ["To", selectedStep.owner || selectedStep.to],
-    ].forEach(([label, value]) => {
-      const field = createElement("div", "step-field step-io-card");
-      field.append(createElement("dt", "", label), createElement("dd", "", value || "준비 중입니다."));
-      fields.appendChild(field);
+    const traceWrap = createElement("div", "signal-trace-wrap");
+    traceWrap.setAttribute("aria-label", "선택한 조건의 시스템 경로");
+    const trace = createElement("ol", "signal-trace");
+    route.forEach((routeItem, index) => {
+      const item = createElement("li", "signal-node");
+      const stateName = routeState(index, route.length, scenario, steps.length);
+      item.dataset.state = stateName;
+      const button = createElement("button", "signal-node__button");
+      button.type = "button";
+      button.dataset.focusKey = `route-${index}`;
+      button.disabled = stateName === "blocked" || steps.length === 0;
+      button.setAttribute("aria-label", `${routeItem.label}: ${routeStateLabel(stateName)}`);
+      if (stateName === "active") {
+        button.setAttribute("aria-current", "step");
+      }
+      button.append(
+        createElement("span", "signal-node__index", String(index + 1).padStart(2, "0")),
+        createElement("strong", "signal-node__label", routeItem.label),
+        createElement("span", "signal-node__state", routeStateLabel(stateName))
+      );
+      button.addEventListener("click", () => {
+        const mappedStep = route.length <= 1
+          ? 0
+          : Math.round((index / (route.length - 1)) * Math.max(steps.length - 1, 0));
+        state.stepIndex = Math.max(0, Math.min(steps.length - 1, mappedStep));
+        state.isPlaying = false;
+        render({ focusKey: `route-${index}` });
+      });
+      item.appendChild(button);
+      trace.appendChild(item);
     });
-    detail.appendChild(fields);
+    traceWrap.appendChild(trace);
+    stage.appendChild(traceWrap);
 
-    const linkedCodePoints = stepCodePoints(sequence, selectedStep);
-    if (linkedCodePoints.length > 0) {
-      const codeWrap = createElement("div", "step-code-points");
-      codeWrap.appendChild(createElement("h4", "", "이 단계에서 볼 코드"));
-      linkedCodePoints.forEach((point) => codeWrap.appendChild(makeCodePointCard(point, true)));
-      detail.appendChild(codeWrap);
+    if (list(scenario.fanOut).length) {
+      const fanOut = createElement("div", "fanout-board");
+      fanOut.appendChild(createElement("p", "fanout-board__label", "Broadcast recipients"));
+      const recipients = createElement("div", "fanout-board__recipients");
+      list(scenario.fanOut).forEach((recipient) => recipients.appendChild(createElement("span", "fanout-recipient", recipient)));
+      fanOut.appendChild(recipients);
+      stage.appendChild(fanOut);
     }
 
-    const controls = createElement("div", "step-controls");
-    const progressValue = steps.length > 0 ? ((state.stepIndex + 1) / steps.length) * 100 : 0;
-    const progress = createElement("div", "step-progress step-progress-track");
-    progress.setAttribute("aria-label", `현재 단계 ${steps.length ? state.stepIndex + 1 : 0} / ${steps.length}`);
-    const progressFill = createElement("span", "step-progress-fill");
-    progressFill.style.width = `${progressValue}%`;
-    progress.appendChild(progressFill);
-    const progressText = createElement("span", "progress-text", `${steps.length ? state.stepIndex + 1 : 0} / ${steps.length}`);
-    const group = createElement("div", "control-group step-playback");
-    const prev = createElement("button", "control-button", "이전");
-    prev.type = "button";
-    prev.disabled = state.stepIndex === 0;
-    prev.setAttribute("aria-label", "이전 단계 보기");
-    prev.addEventListener("click", () => {
-      state.stepIndex = Math.max(0, state.stepIndex - 1);
-      render();
+    const snapshot = createElement("dl", "state-snapshot");
+    list(scenario.snapshot).forEach((item) => {
+      const card = createElement("div", `state-snapshot__item state-snapshot__item--${item.tone || "neutral"}`);
+      card.append(createElement("dt", "", item.label), createElement("dd", "", item.value));
+      snapshot.appendChild(card);
     });
-    const play = createElement("button", "control-button", state.isPlaying ? "일시정지" : "재생");
+    if (snapshot.childNodes.length) {
+      stage.appendChild(snapshot);
+    }
+
+    const outcome = createElement("div", "outcome-panel");
+    const evidence = createElement("div", "outcome-panel__item");
+    evidence.append(createElement("span", "outcome-label", "관찰 증거"), createElement("p", "", scenario.evidence || flow.summary || "현재 경로를 확인하세요."));
+    const decision = createElement("div", "outcome-panel__item");
+    decision.append(createElement("span", "outcome-label", "판단"), createElement("p", "", scenario.outcome || "선택한 단계의 확인 지점을 설명해보세요."));
+    outcome.append(evidence, decision);
+    stage.appendChild(outcome);
+
+    const controls = createElement("div", "trace-controls");
+    const previous = createElement("button", "control-button", "← 이전 단계");
+    previous.type = "button";
+    previous.dataset.focusKey = "previous";
+    previous.disabled = state.stepIndex === 0 || steps.length === 0;
+    previous.addEventListener("click", () => {
+      state.stepIndex = Math.max(0, state.stepIndex - 1);
+      state.isPlaying = false;
+      render({ focusKey: state.stepIndex === 0 ? "next-step" : "previous" });
+    });
+
+    const progressWrap = createElement("div", "trace-progress");
+    const progress = createElement("progress", "trace-progress__bar");
+    progress.max = Math.max(steps.length, 1);
+    progress.value = steps.length ? state.stepIndex + 1 : 0;
+    progress.setAttribute("aria-label", `현재 단계 ${steps.length ? state.stepIndex + 1 : 0} / ${steps.length}`);
+    progressWrap.append(progress, createElement("span", "trace-progress__text", `${steps.length ? state.stepIndex + 1 : 0} / ${steps.length}`));
+
+    const play = createElement("button", "control-button", motionQuery.matches ? "모션 감소: 수동" : state.isPlaying ? "일시정지" : "재생");
     play.type = "button";
-    play.disabled = steps.length <= 1;
+    play.dataset.focusKey = "play";
+    play.disabled = steps.length <= 1 || motionQuery.matches;
     play.setAttribute("aria-pressed", String(state.isPlaying));
-    play.setAttribute("aria-label", state.isPlaying ? "단계 자동 재생 일시정지" : "단계 자동 재생 시작");
     play.addEventListener("click", () => {
       if (!state.isPlaying && state.stepIndex >= steps.length - 1) {
         state.stepIndex = 0;
       }
       state.isPlaying = !state.isPlaying;
-      render();
+      render({ focusKey: "play" });
     });
-    const speed = createElement("button", "control-button", `속도 ${currentSpeed().label}`);
+
+    const speed = createElement("button", "control-button control-button--quiet", `속도 ${playbackSpeeds[state.speedIndex].label}`);
     speed.type = "button";
-    speed.disabled = steps.length <= 1;
-    speed.setAttribute("aria-label", "자동 재생 속도 변경");
+    speed.dataset.focusKey = "speed";
+    speed.disabled = steps.length <= 1 || motionQuery.matches;
     speed.addEventListener("click", () => {
       state.speedIndex = (state.speedIndex + 1) % playbackSpeeds.length;
-      render();
+      render({ focusKey: "speed" });
     });
-    const next = createElement("button", "control-button", "다음");
+
+    const next = createElement("button", "control-button", "다음 단계 →");
     next.type = "button";
-    next.disabled = state.stepIndex >= steps.length - 1;
-    next.setAttribute("aria-label", "다음 단계 보기");
+    next.dataset.focusKey = "next-step";
+    next.disabled = state.stepIndex >= steps.length - 1 || steps.length === 0;
     next.addEventListener("click", () => {
       state.stepIndex = Math.min(steps.length - 1, state.stepIndex + 1);
-      render();
+      state.isPlaying = false;
+      render({ focusKey: state.stepIndex >= steps.length - 1 ? "previous" : "next-step" });
     });
-    group.append(prev, play, speed, next);
-    controls.append(progress, progressText, group);
-    detail.appendChild(controls);
 
-    diagram.append(rail.childNodes.length ? rail : createElement("p", "empty-state", "단계 데이터를 준비 중입니다."), detail);
-    shell.appendChild(diagram);
+    controls.append(previous, progressWrap, play, speed, next);
+    stage.appendChild(controls);
+    const liveStatus = createElement("p", "sr-only", `${scenario.label || "현재 조건"}: ${scenario.outcome || "경로가 갱신되었습니다."}`);
+    liveStatus.setAttribute("role", "status");
+    liveStatus.setAttribute("aria-live", "polite");
+    stage.appendChild(liveStatus);
+    section.appendChild(stage);
+    main.appendChild(section);
+  }
 
-    if (flow.mermaid) {
-      const details = createElement("details", "code-panel source-panel");
-      details.append(createElement("summary", "", "Source View: Mermaid 원문 보기"), createElement("pre", "", flow.mermaid));
-      shell.appendChild(details);
+  function renderCodePoint(point) {
+    const article = createElement("article", "code-evidence");
+    const header = createElement("header", "code-evidence__header");
+    header.append(
+      createElement("h3", "", point.title || "코드 포인트"),
+      createElement("code", "file-path", point.file || "파일 경로 확인")
+    );
+    article.appendChild(header);
+    if (point.snippet || point.example) {
+      const pre = createElement("pre", "code-block");
+      pre.appendChild(createElement("code", "", point.snippet || point.example));
+      article.appendChild(pre);
+    }
+    appendText(article, "p", "code-explanation", point.explanation || point.body);
+    appendText(article, "p", "code-check", point.check ? `확인: ${point.check}` : "");
+    if (point.sourceUrl) {
+      const source = makeLink("이 코드 위치 열기 ↗", point.sourceUrl, "text-link");
+      source.target = "_blank";
+      source.rel = "noreferrer";
+      article.appendChild(source);
+    }
+    return article;
+  }
+
+  function renderEvidence(main, sequence) {
+    const step = currentStep(sequence);
+    const section = createElement("section", "evidence-section");
+    section.id = "evidence";
+    const heading = createElement("header", "section-heading");
+    heading.append(
+      createElement("p", "eyebrow", "Selected evidence"),
+      createElement("h2", "", "선택한 단계의 개념과 코드"),
+      createElement("p", "section-lede", "현재 경로에서 무엇을 관찰했고 어느 책임을 확인해야 하는지 연결합니다.")
+    );
+    section.appendChild(heading);
+
+    const layout = createElement("div", "evidence-layout");
+    const primary = createElement("article", "step-evidence");
+    primary.append(
+      createElement("p", "step-evidence__meta", `Step ${currentSteps(sequence).length ? state.stepIndex + 1 : 0}`),
+      createElement("h3", "", step.action || step.message || step.owner || "단계 정보를 확인하세요.")
+    );
+    appendText(primary, "p", "step-note", step.note);
+    const fields = createElement("dl", "evidence-fields");
+    [
+      ["관찰", step.problem || step.input],
+      ["개념", step.concept || step.owner],
+      ["행동", step.action || step.message],
+      ["확인", step.check || step.output],
+    ].forEach(([label, value]) => {
+      const field = createElement("div", "evidence-field");
+      field.append(createElement("dt", "", label), createElement("dd", "", value || "이 단계의 데이터를 확인하세요."));
+      fields.appendChild(field);
+    });
+    primary.appendChild(fields);
+
+    const context = createElement("aside", "context-drawer");
+    context.appendChild(createElement("h3", "", "책임과 개념"));
+    const owner = String(step.owner || step.to || step.concept || "").toLowerCase();
+    const responsibility = list(sequence.responsibilities).find((item) => owner.includes(String(item.name || "").toLowerCase())) || list(sequence.responsibilities)[0];
+    if (responsibility) {
+      const block = createElement("div", "context-block");
+      block.append(createElement("span", "context-label", responsibility.name), createElement("p", "", responsibility.role || ""));
+      appendText(block, "p", "context-caution", responsibility.caution);
+      context.appendChild(block);
+    }
+    list(sequence.concepts).slice(0, 2).forEach((concept) => {
+      const block = createElement("div", "context-block");
+      block.append(createElement("span", "context-label", concept.title || concept.name), createElement("p", "", concept.body || concept.description || ""));
+      context.appendChild(block);
+    });
+    layout.append(primary, context);
+    section.appendChild(layout);
+
+    const codePoints = linkedCodePoints(sequence, step);
+    const codeGrid = createElement("div", "code-evidence-grid");
+    codePoints.forEach((point) => codeGrid.appendChild(renderCodePoint(point)));
+    section.appendChild(codeGrid.childNodes.length ? codeGrid : createElement("p", "empty-state", "이 단계에 연결된 코드 포인트가 없습니다. 데이터의 codePointIds를 확인하세요."));
+
+    const referenceDetails = createElement("details", "reference-shelf");
+    referenceDetails.appendChild(createElement("summary", "", "용어·범위·관련 문서 펼치기"));
+    const referenceBody = createElement("div", "reference-shelf__body");
+    const glossary = createElement("dl", "glossary-list");
+    list(sequence.glossary).forEach((item) => {
+      const entry = createElement("div", "glossary-entry");
+      entry.append(createElement("dt", "", item.term), createElement("dd", "", item.meaning));
+      appendText(entry, "p", "context-caution", item.caution);
+      glossary.appendChild(entry);
+    });
+    referenceBody.appendChild(glossary.childNodes.length ? glossary : createElement("p", "empty-state", "추가 용어가 없습니다."));
+
+    const practical = createElement("div", "scope-notes");
+    list(sequence.practical).forEach((item) => {
+      const note = createElement("article", "scope-note");
+      note.append(createElement("h3", "", item.title), createElement("p", "", item.body));
+      practical.appendChild(note);
+    });
+    if (practical.childNodes.length) {
+      referenceBody.appendChild(practical);
     }
 
-    section.appendChild(shell);
-    stack.appendChild(section);
-  }
-
-  function renderCodePoints(stack, sequence) {
-    const section = makeSection("code", "Code Points", "주요 코드 포인트", "전체 정답 코드 대신 파일 경로, 핵심 5-20줄, 확인 포인트만 봅니다.");
-    const codePoints = getCodePoints(sequence);
-    const grid = createElement("div", "code-point-grid");
-    codePoints.forEach((point) => grid.appendChild(makeCodePointCard(point, false)));
-    section.appendChild(grid.childNodes.length ? grid : createElement("p", "empty-state", "코드 포인트를 준비 중입니다."));
-    stack.appendChild(section);
-  }
-
-  function renderObjectFlow(stack, sequence) {
-    const items = getObjectFlow(sequence);
-    const section = makeSection("object-flow", "Object Flow", "객체와 계층 이동", "DTO, Entity, Message, Config, Runtime 객체가 어디를 지나며 바뀌는지 봅니다.");
-    const strip = createElement("div", "object-flow-strip");
-    items.forEach((item, index) => {
-      const chip = createElement("article", "object-chip");
-      chip.append(
-        createElement("span", "object-layer", item.layer || `Layer ${index + 1}`),
-        createElement("h3", "", item.name || item),
-        createElement("p", "", item.type || item.role || "흐름 구성요소")
-      );
-      strip.appendChild(chip);
-      if (index < items.length - 1) {
-        strip.appendChild(createElement("span", "object-arrow", "->"));
-      }
+    const links = createElement("nav", "source-links");
+    links.setAttribute("aria-label", "관련 학습 문서");
+    collectSourceLinks(sequence).forEach((item) => {
+      const link = makeLink(`${item.label} ↗`, item.href, "source-link");
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      links.appendChild(link);
     });
-    section.appendChild(strip.childNodes.length ? strip : createElement("p", "empty-state", "객체 흐름을 준비 중입니다."));
-    stack.appendChild(section);
+    if (links.childNodes.length) {
+      referenceBody.appendChild(links);
+    }
+    referenceDetails.appendChild(referenceBody);
+    section.appendChild(referenceDetails);
+    main.appendChild(section);
   }
 
-  function renderResponsibilities(stack, sequence) {
-    const section = makeSection("responsibilities", "Responsibilities", "책임 지도", "각 계층과 구성요소가 맡는 일을 분리해서 봅니다.");
-    const grid = createElement("div", "responsibility-grid");
-    (sequence.responsibilities || []).forEach((item) => {
-      const card = createElement("article", "responsibility-card");
-      card.append(createElement("h3", "", item.name), createElement("p", "", item.role || ""));
-      appendText(card, "p", "lede", item.caution);
-      grid.appendChild(card);
+  function renderVerification(main, sequence) {
+    const section = createElement("section", "verification-section");
+    section.id = "verify";
+    const checks = list(sequence.checks).length ? sequence.checks : list(sequence.practice);
+    const heading = createElement("header", "section-heading");
+    heading.append(
+      createElement("p", "eyebrow", "Verification"),
+      createElement("h2", "", "말로 설명할 수 있는지 확인하세요"),
+      createElement("p", "section-lede", "체크 상태는 현재 페이지에서만 유지되며 정답을 대신하지 않습니다.")
+    );
+    section.appendChild(heading);
+
+    const status = createElement("div", "verification-status");
+    const progress = createElement("progress", "verification-progress");
+    progress.max = Math.max(checks.length, 1);
+    progress.value = state.checked.size;
+    progress.setAttribute("aria-label", `확인 완료 ${state.checked.size} / ${checks.length}`);
+    status.append(progress, createElement("span", "verification-count", `${state.checked.size} / ${checks.length} 확인`));
+    section.appendChild(status);
+
+    const listElement = createElement("ul", "verification-list");
+    checks.forEach((check, index) => {
+      const item = createElement("li", "verification-item");
+      const input = createElement("input", "verification-checkbox");
+      input.type = "checkbox";
+      input.id = `verification-${index}`;
+      input.checked = state.checked.has(index);
+      const label = createElement("label", "verification-label", check);
+      label.htmlFor = input.id;
+      input.addEventListener("change", () => {
+        if (input.checked) {
+          state.checked.add(index);
+        } else {
+          state.checked.delete(index);
+        }
+        progress.value = state.checked.size;
+        status.querySelector(".verification-count").textContent = `${state.checked.size} / ${checks.length} 확인`;
+      });
+      item.append(input, label);
+      listElement.appendChild(item);
     });
-    section.appendChild(grid.childNodes.length ? grid : createElement("p", "empty-state", "책임 지도를 준비 중입니다."));
-    stack.appendChild(section);
+    section.appendChild(listElement.childNodes.length ? listElement : createElement("p", "empty-state", "확인 질문이 없습니다. 시퀀스 데이터를 확인하세요."));
+    main.appendChild(section);
   }
 
-  function renderConcepts(stack, sequence) {
-    const section = makeSection("concepts", "Concepts", "핵심 개념", "이번 시퀀스를 읽을 때 먼저 붙잡아야 할 개념입니다.");
-    const grid = createElement("div", "concept-grid");
-    (sequence.concepts || []).forEach((item) => {
-      const card = createElement("article", "concept-card");
-      card.append(createElement("h3", "", item.title || item.name), createElement("p", "", item.body || item.description || ""));
-      grid.appendChild(card);
-    });
-    section.appendChild(grid.childNodes.length ? grid : createElement("p", "empty-state", "핵심 개념을 준비 중입니다."));
-    stack.appendChild(section);
+  function localNextHref(sequence) {
+    const current = Number(sequence.id);
+    const next = Number(sequence.next && sequence.next.id);
+    const repoName = sequence.repo && sequence.repo.name;
+    const sameRepo =
+      (repoName === "spring-boot-db-access-lab" && current >= 2 && current <= 5 && next >= 3 && next <= 6) ||
+      (repoName === "spring-boot-deployment-runtime-lab" && current === 9 && next === 10);
+    return sameRepo ? `../${String(next).padStart(2, "0")}/index.html` : "../../index.html";
   }
 
-  function renderGlossary(stack, sequence) {
-    const section = makeSection("terminology", "Terminology", "용어 정리", "같은 단어라도 이번 시퀀스 안에서 어떤 의미인지 확인합니다.");
-    const glossary = sequence.glossary || [];
+  function renderNext(main, sequence) {
+    const nextData = sequence.next || {};
+    const section = createElement("section", "next-question");
+    section.id = "next";
+    const copy = createElement("div", "next-question__copy");
+    copy.append(
+      createElement("p", "eyebrow", "Next question"),
+      createElement("h2", "", nextData.id && nextData.title ? `${nextData.id} ${nextData.title}` : "다음 학습으로 연결"),
+      createElement("p", "", nextData.reason || "이번 흐름의 확인 질문을 마치고 다음 시퀀스로 이동하세요.")
+    );
+    const sameRepoLink = localNextHref(sequence);
+    const actionLabel = sameRepoLink === "../../index.html" ? "이 저장소 학습 경로로 돌아가기" : "다음 질문 열기";
+    section.append(copy, makeLink(`${actionLabel} →`, sameRepoLink, "next-action"));
+    main.appendChild(section);
+  }
 
-    if (glossary.length === 0) {
-      section.appendChild(createElement("p", "empty-state", "용어 정리를 준비 중입니다."));
-      stack.appendChild(section);
+  function setupSectionObserver() {
+    if (sectionObserver) {
+      sectionObserver.disconnect();
+    }
+    if (!("IntersectionObserver" in window)) {
       return;
     }
-
-    const wrap = createElement("div", "glossary-table-wrap");
-    const table = createElement("table", "glossary-table");
-    const thead = createElement("thead");
-    const headRow = createElement("tr");
-    ["용어", "이번 시퀀스에서의 의미", "헷갈리기 쉬운 점"].forEach((label) => headRow.appendChild(createElement("th", "", label)));
-    thead.appendChild(headRow);
-    const tbody = createElement("tbody");
-    glossary.forEach((item) => {
-      const row = createElement("tr");
-      row.append(
-        createElement("td", "", item.term),
-        createElement("td", "", item.meaning),
-        createElement("td", "", item.caution)
-      );
-      tbody.appendChild(row);
-    });
-    table.append(thead, tbody);
-    wrap.appendChild(table);
-    section.appendChild(wrap);
-    stack.appendChild(section);
-  }
-
-  function renderPractical(stack, sequence) {
-    const section = makeSection("practical", "Practical Points", "실무 포인트", "이번 범위에서 일부러 남기는 한계와 실제 코드 리뷰에서 자주 보는 지점을 확인합니다.");
-    const grid = createElement("div", "practical-grid");
-    (sequence.practical || []).forEach((item) => {
-      const card = createElement("article", "practical-card");
-      card.append(createElement("h3", "", item.title), createElement("p", "", item.body));
-      grid.appendChild(card);
-    });
-    section.appendChild(grid.childNodes.length ? grid : createElement("p", "empty-state", "실무 포인트를 준비 중입니다."));
-    stack.appendChild(section);
-  }
-
-  function renderReferences(stack, sequence) {
-    const references = getReferences(sequence);
-    const section = makeSection("references", "Official References", "공식 문서 레퍼런스", "Visual Lab은 공식 문서를 script나 style로 불러오지 않고, 학습 링크로만 연결합니다.");
-    const grid = createElement("div", "reference-grid");
-    references.forEach((item) => {
-      const card = createElement("a", "reference-card related-link-card", "");
-      card.href = item.href;
-      card.target = "_blank";
-      card.rel = "noreferrer";
-      card.append(createElement("h3", "", item.label), createElement("p", "", item.reason || "공식 문서로 기준을 확인합니다."));
-      grid.appendChild(card);
-    });
-    section.appendChild(grid.childNodes.length ? grid : createElement("p", "empty-state", "공식 문서 레퍼런스를 준비 중입니다."));
-    stack.appendChild(section);
-  }
-
-  function renderChecks(stack, sequence) {
-    const section = makeSection("checklist", "Practice Check", "스스로 확인할 질문", "구현 후 말로 설명할 수 있어야 하는 기준입니다.");
-    const grid = createElement("div", "check-grid");
-    (sequence.checks || []).forEach((item) => {
-      const card = createElement("article", "check-card");
-      card.append(createElement("span", "check-marker", "?"), createElement("p", "", item));
-      grid.appendChild(card);
-    });
-    section.appendChild(grid.childNodes.length ? grid : createElement("p", "empty-state", "확인 질문을 준비 중입니다."));
-    stack.appendChild(section);
-  }
-
-  function renderNext(stack, sequence) {
-    const next = sequence.next || {};
-    const section = makeSection("next", "Next", "다음 단계", next.reason || "다음 시퀀스로 이어지는 지점을 확인합니다.");
-    const panel = createElement("article", "next-panel");
-    panel.append(
-      createElement("h3", "", next.id && next.title ? `${next.id} ${next.title}` : "다음 학습으로 연결"),
-      createElement("p", "", next.reason || "다음 시퀀스 정보를 준비 중입니다.")
+    const links = [...document.querySelectorAll("[data-section-link]")];
+    const sections = links.map((link) => document.getElementById(link.dataset.sectionLink)).filter(Boolean);
+    sectionObserver = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!visible) {
+          return;
+        }
+        links.forEach((link) => {
+          if (link.dataset.sectionLink === visible.target.id) {
+            link.setAttribute("aria-current", "location");
+          } else {
+            link.removeAttribute("aria-current");
+          }
+        });
+      },
+      { rootMargin: "-20% 0px -65%", threshold: [0.1, 0.4, 0.7] }
     );
-    section.appendChild(panel);
-    stack.appendChild(section);
+    sections.forEach((section) => sectionObserver.observe(section));
   }
 
-  function renderContent(root) {
-    const sequence = currentSequence();
-    setDocumentTitle(sequence);
-
-    const layout = createElement("div", "layout");
-    renderSectionNav(layout);
-
-    const stack = createElement("main", "content-stack");
-    stack.setAttribute("aria-label", "Visual Lab content");
-    renderHero(stack, sequence);
-    renderWhy(stack, sequence);
-    renderMentalModel(stack, sequence);
-    renderFlow(stack, sequence);
-    renderCodePoints(stack, sequence);
-    renderObjectFlow(stack, sequence);
-    renderResponsibilities(stack, sequence);
-    renderConcepts(stack, sequence);
-    renderGlossary(stack, sequence);
-    renderPractical(stack, sequence);
-    renderReferences(stack, sequence);
-    renderChecks(stack, sequence);
-    renderNext(stack, sequence);
-
-    layout.appendChild(stack);
-    root.appendChild(layout);
+  function renderSequence(root, sequence) {
+    document.title = `${sequence.id} ${sequence.title} | ${(sequence.repo && sequence.repo.name) || "A&I Backend"} Visual Lab`;
+    renderTopbar(root, sequence);
+    const main = createElement("main", "sequence-shell");
+    main.id = "main-content";
+    renderHero(main, sequence);
+    renderLearningNav(main);
+    renderWorkbench(main, sequence);
+    renderEvidence(main, sequence);
+    renderVerification(main, sequence);
+    renderNext(main, sequence);
+    root.appendChild(main);
+    window.requestAnimationFrame(setupSectionObserver);
   }
 
-  function initializeState() {
-    const hashId = getHashSequenceId();
-    const defaultId = data.defaultSequence || (sequences[0] && sequences[0].id) || "NN";
-    state.sequenceId = findSequence(hashId).id || defaultId;
-    if (data.kind !== "hub" && !hashId && state.sequenceId) {
-      window.history.replaceState(null, "", `#seq-${state.sequenceId}`);
-    }
-  }
-
-  function renderHub(root) {
-    renderTopbar(root);
-
-    const shell = createElement("main", "page-shell hub-page");
-    const container = createElement("div", "visual-container");
-    const hero = createElement("section", "hub-hero visual-card");
-    hero.append(
-      createElement("p", "eyebrow", "Visual Lab Hub"),
-      createElement("h1", "", data.title || "A&I Visual Lab"),
-      createElement("p", "goal", data.description || data.goal || "이 토픽 레포에서 다루는 시퀀스 목록과 상세 Visual Lab으로 이동합니다.")
-    );
-    container.appendChild(hero);
-
-    const grid = createElement("section", "sequence-hub-grid");
-    (Array.isArray(data.sequences) ? data.sequences : []).forEach((sequence) => {
-      const card = createElement("a", "sequence-card topic-card visual-card", "");
-      card.href = sequence.href || `./sequences/${sequence.sequence || sequence.id}/index.html`;
-      card.append(
-        createElement("span", "sequence-badge", `Sequence ${sequence.sequence || sequence.id}`),
-        createElement("h2", "", sequence.title || "Visual Lab"),
-        createElement("p", "lede", sequence.topic || sequence.summary || ""),
-        createElement("p", "", sequence.summary || sequence.goal || "")
-      );
-      grid.appendChild(card);
-    });
-    container.appendChild(grid.childNodes.length ? grid : createElement("p", "empty-state", "허브 데이터를 준비 중입니다."));
-    shell.appendChild(container);
-    root.appendChild(shell);
-  }
-
-  function render() {
+  function render(options) {
     clearPlaybackTimer();
+    const focusKey = options && options.focusKey;
     app.replaceChildren();
+    const skip = makeLink("본문으로 건너뛰기", "#main-content", "skip-link");
+    app.appendChild(skip);
+
     if (data.kind === "hub") {
       renderHub(app);
       return;
     }
-    renderTopbar(app);
-    renderSequenceSwitcher(app);
-    renderContent(app);
-    schedulePlayback();
-  }
 
-  window.addEventListener("hashchange", () => {
-    const nextId = getHashSequenceId();
-    if (!nextId || nextId === state.sequenceId) {
+    const sequence = currentSequence();
+    if (!sequence) {
+      const error = createElement("main", "fatal-state");
+      error.id = "main-content";
+      error.append(
+        createElement("h1", "", "Visual Lab 데이터를 읽지 못했습니다"),
+        createElement("p", "", "visual-lab-data.js가 먼저 로드되고 kind 값이 올바른지 확인하세요.")
+      );
+      app.appendChild(error);
       return;
     }
-    state.sequenceId = findSequence(nextId).id;
-    state.flowIndex = 0;
-    state.stepIndex = 0;
+
+    const workbench = normalizedWorkbench(sequence);
+    const scenarios = list(workbench.scenarios);
+    state.scenarioIndex = Math.min(state.scenarioIndex, Math.max(scenarios.length - 1, 0));
+    const scenario = currentScenario(sequence);
+    state.flowIndex = flowIndexById(sequence, scenario.flowId);
+    const steps = currentSteps(sequence);
+    state.stepIndex = Math.min(state.stepIndex, Math.max(steps.length - 1, 0));
+
+    renderSequence(app, sequence);
+    schedulePlayback(sequence);
+
+    if (focusKey) {
+      window.requestAnimationFrame(() => {
+        const target = document.querySelector(`[data-focus-key="${focusKey}"]`);
+        if (target && !target.disabled) {
+          target.focus();
+        }
+      });
+    }
+  }
+
+  motionQuery.addEventListener("change", () => {
+    state.isPlaying = false;
     render();
   });
-
   window.addEventListener("beforeunload", clearPlaybackTimer);
-
-  initializeState();
   render();
 })();

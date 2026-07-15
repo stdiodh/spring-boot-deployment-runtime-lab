@@ -5,6 +5,135 @@ window.visualLabData = {
   "subtitle": "Automation and operations flow",
   "goal": "build, deploy, verify job과 artifact 전달, 배포/검증 스크립트의 책임을 이해합니다.",
   "problem": "사람이 매번 같은 배포 명령을 손으로 반복하면 순서가 흔들리고 실패 기준이 누락될 수 있습니다.",
+  "workbench": {
+    "kind": "pipeline",
+    "title": "Pipeline Gate",
+    "instruction": "실패 지점을 선택해 이후 job이 차단되는지와 배포 성공을 판정할 증거를 확인하세요.",
+    "scenarios": [
+      {
+        "id": "pipeline-verified",
+        "label": "검증까지 완료",
+        "flowId": "build-deploy-verify",
+        "tone": "recovered",
+        "prompt": "검증된 artifact가 배포되고 compose, 로그, HTTP 확인까지 이어집니다.",
+        "route": [
+          "Push / workflow_dispatch",
+          "build job",
+          "Artifact",
+          "deploy job",
+          "deploy.sh",
+          "EC2 Runtime",
+          "verify job",
+          "check-deploy.sh",
+          "HTTP response"
+        ],
+        "snapshot": [
+          {
+            "label": "Workflow",
+            "value": "build · deploy · verify 통과",
+            "tone": "recovered"
+          },
+          {
+            "label": "성공 증거",
+            "value": "compose 상태 · 로그 · HTTP 응답",
+            "tone": "recovered"
+          }
+        ],
+        "evidence": "build 산출물이 artifact로 전달되고 verify 단계가 compose 상태, 로그, HTTP 응답을 확인합니다.",
+        "outcome": "배포 명령 종료가 아니라 verify 증거까지 통과해야 성공으로 판정합니다."
+      },
+      {
+        "id": "pipeline-build-failed",
+        "label": "build에서 차단",
+        "flowId": "build-deploy-verify",
+        "tone": "blocked",
+        "prompt": "테스트 또는 bootJar가 실패했을 때 deploy가 실행되는지 확인합니다.",
+        "route": [
+          "Push / workflow_dispatch",
+          "build job",
+          "Artifact",
+          "deploy job",
+          "verify job"
+        ],
+        "snapshot": [
+          {
+            "label": "첫 실패",
+            "value": "build 실패 · deploy 차단",
+            "tone": "blocked"
+          },
+          {
+            "label": "Artifact",
+            "value": "생성되지 않음",
+            "tone": "blocked"
+          }
+        ],
+        "evidence": "build와 test가 실패하면 artifact가 만들어지지 않고 `needs`로 연결된 다음 job은 진행되지 않아야 합니다.",
+        "outcome": "처음 실패한 build step을 원인 분석의 출발점으로 삼습니다.",
+        "stopAfter": 1
+      },
+      {
+        "id": "pipeline-deploy-failed",
+        "label": "deploy에서 차단",
+        "flowId": "workflow-step-responsibility",
+        "tone": "blocked",
+        "prompt": "artifact는 준비됐지만 서버 갱신에 실패한 경우 verify 경계를 확인합니다.",
+        "route": [
+          "build job",
+          "Artifact",
+          "deploy job",
+          "deploy.sh",
+          "EC2 Runtime",
+          "verify job"
+        ],
+        "snapshot": [
+          {
+            "label": "Deploy",
+            "value": "서버 갱신 실패 · verify 차단",
+            "tone": "blocked"
+          },
+          {
+            "label": "verify job",
+            "value": "실행되지 않음",
+            "tone": "blocked"
+          }
+        ],
+        "evidence": "deploy.sh는 release 파일 배치와 애플리케이션 컨테이너 갱신을 담당하며, 실패 시 다음 job으로 넘어가지 않습니다.",
+        "outcome": "build 성공과 deploy 성공을 분리하고 deploy step 로그를 먼저 확인합니다.",
+        "stopAfter": 3
+      },
+      {
+        "id": "pipeline-verify-failed",
+        "label": "verify 실패",
+        "flowId": "workflow-step-responsibility",
+        "tone": "warning",
+        "prompt": "컨테이너 갱신 뒤 상태, 로그 또는 HTTP 확인이 실패한 경우 성공 판정을 보류합니다.",
+        "route": [
+          "Artifact",
+          "deploy job",
+          "deploy.sh",
+          "EC2 Runtime",
+          "verify job",
+          "check-deploy.sh",
+          "배포 성공 판정"
+        ],
+        "snapshot": [
+          {
+            "label": "Verify",
+            "value": "compose · log · HTTP 증거 부족",
+            "tone": "warning"
+          },
+          {
+            "label": "배포 성공 판정",
+            "value": "보류",
+            "tone": "warning"
+          }
+        ],
+        "evidence": "check-deploy.sh의 compose 상태, 앱 로그, HTTP 응답 중 하나라도 실패하면 workflow는 성공으로 끝나지 않아야 합니다.",
+        "outcome": "실행 파일 전달은 끝났지만 서비스 정상 여부가 확인되지 않았으므로 배포 완료로 보지 않습니다.",
+        "stopAfter": 5
+      }
+    ]
+  },
   "repo": {
     "name": "spring-boot-deployment-runtime-lab",
     "path": "spring-boot-deployment-runtime-lab"

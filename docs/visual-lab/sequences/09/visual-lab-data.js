@@ -5,6 +5,131 @@ window.visualLabData = {
   "subtitle": "Deployment and runtime environment",
   "goal": "bootJar, Dockerfile, image, container, prod profile, 환경변수, runtime log 흐름을 하나의 실행 단위로 이해합니다.",
   "problem": "로컬에서 `bootRun`으로만 실행한 애플리케이션은 운영 서버에서 같은 조건으로 재현되기 어렵습니다.",
+  "workbench": {
+    "kind": "runtime",
+    "title": "Runtime Boundary",
+    "instruction": "실행 조건을 바꿔 jar, image, container, 설정, 로그 중 어디까지 도달하는지 확인하세요.",
+    "scenarios": [
+      {
+        "id": "runtime-ready",
+        "label": "컨테이너 실행 확인",
+        "flowId": "jar-to-container",
+        "tone": "recovered",
+        "prompt": "테스트를 통과한 jar를 image로 묶고 컨테이너 상태와 로그까지 확인합니다.",
+        "route": [
+          "Source code",
+          "./gradlew test bootJar",
+          "build/libs/*.jar",
+          "Dockerfile",
+          "Docker image",
+          "Container",
+          "docker compose ps · logs"
+        ],
+        "snapshot": [
+          {
+            "label": "실행 상태",
+            "value": "컨테이너와 로그 확인 완료",
+            "tone": "recovered"
+          },
+          {
+            "label": "검증 증거",
+            "value": "docker compose ps · application logs",
+            "tone": "signal"
+          }
+        ],
+        "evidence": "bootJar 산출물 경로와 Dockerfile의 COPY 경로가 일치하고, 컨테이너 상태와 애플리케이션 로그가 확인됩니다.",
+        "outcome": "빌드 산출물과 runtime 증거가 모두 연결되어야 실행 성공으로 판단합니다."
+      },
+      {
+        "id": "runtime-test-failed",
+        "label": "테스트에서 차단",
+        "flowId": "jar-to-container",
+        "tone": "blocked",
+        "prompt": "배포 전 테스트가 실패한 상태에서 다음 실행 단위로 넘어갈 수 있는지 판단합니다.",
+        "route": [
+          "Source code",
+          "./gradlew test",
+          "bootJar",
+          "Docker build",
+          "Container"
+        ],
+        "snapshot": [
+          {
+            "label": "첫 실패",
+            "value": "테스트 실패 · jar 생성 전 차단",
+            "tone": "blocked"
+          },
+          {
+            "label": "다음 단계",
+            "value": "bootJar · Docker build 실행하지 않음",
+            "tone": "blocked"
+          }
+        ],
+        "evidence": "배포 전 기본 동작을 확인하는 `./gradlew test`가 통과하지 않았습니다.",
+        "outcome": "jar와 image 문제로 확대하지 않고 처음 실패한 테스트를 먼저 해결합니다.",
+        "stopAfter": 1
+      },
+      {
+        "id": "runtime-copy-mismatch",
+        "label": "jar 경로 불일치",
+        "flowId": "jar-to-container",
+        "tone": "blocked",
+        "prompt": "bootJar 결과와 Dockerfile의 COPY 경로가 다를 때 build 경계를 추적합니다.",
+        "route": [
+          "./gradlew bootJar",
+          "build/libs/*.jar",
+          "Dockerfile COPY",
+          "Docker image",
+          "Container"
+        ],
+        "snapshot": [
+          {
+            "label": "Docker build",
+            "value": "jar COPY 경로 불일치",
+            "tone": "blocked"
+          },
+          {
+            "label": "Image 상태",
+            "value": "생성되지 않음",
+            "tone": "blocked"
+          }
+        ],
+        "evidence": "문서의 실패 확인 순서는 jar 산출물 경로와 Dockerfile의 `COPY` 경로를 먼저 비교하도록 안내합니다.",
+        "outcome": "image가 만들어지지 않았으므로 container 실행 문제로 해석하지 않습니다.",
+        "stopAfter": 2
+      },
+      {
+        "id": "runtime-env-missing",
+        "label": "운영 환경변수 누락",
+        "flowId": "runtime-config",
+        "tone": "blocked",
+        "prompt": "prod profile이 요구하는 환경변수가 빠졌을 때 실행과 health 증거를 구분합니다.",
+        "route": [
+          "Compose runtime",
+          "Environment variables",
+          "application-prod.yaml",
+          "Spring Boot App",
+          "Runtime log",
+          "Health evidence"
+        ],
+        "snapshot": [
+          {
+            "label": "Runtime config",
+            "value": "필수 환경변수 누락",
+            "tone": "blocked"
+          },
+          {
+            "label": "Health evidence",
+            "value": "확인되지 않음",
+            "tone": "blocked"
+          }
+        ],
+        "evidence": "application-prod.yaml은 DB, Redis, JWT, mail, OAuth2 값을 실행 환경에서 주입받습니다.",
+        "outcome": "컨테이너 명령이 끝났더라도 로그와 health 증거가 없으면 정상 실행으로 판정하지 않습니다.",
+        "stopAfter": 4
+      }
+    ]
+  },
   "repo": {
     "name": "spring-boot-deployment-runtime-lab",
     "path": "spring-boot-deployment-runtime-lab"
