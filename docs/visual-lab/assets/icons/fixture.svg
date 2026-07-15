@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="fixture-title fixture-desc">
+  <title id="fixture-title">Test fixture</title>
+  <desc id="fixture-desc">A&amp;I Backend Visual Lab에서 Test fixture 책임을 나타내는 선형 아이콘</desc>
+  <metadata>Source: A&amp;I Backend Visual Lab; License: project-local educational asset; redistribution follows repository terms.</metadata>
+  <g fill="none" stroke="#0C2691" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v12H4zM8 3h8v4M8 11h3v3H8zM14 11h3v3h-3z"/></g>
+</svg>

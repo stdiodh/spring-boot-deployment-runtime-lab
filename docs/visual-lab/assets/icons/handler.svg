@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="handler-title handler-desc">
+  <title id="handler-title">Exception handler</title>
+  <desc id="handler-desc">A&amp;I Backend Visual Lab에서 Exception handler 책임을 나타내는 선형 아이콘</desc>
+  <metadata>Source: A&amp;I Backend Visual Lab; License: project-local educational asset; redistribution follows repository terms.</metadata>
+  <g fill="none" stroke="#0C2691" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5v18h3M16 3h3v18h-3M12 7v6M12 17h.01"/></g>
+</svg>

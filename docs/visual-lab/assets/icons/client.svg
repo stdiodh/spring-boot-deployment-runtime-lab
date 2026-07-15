@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="client-title client-desc">
+  <title id="client-title">HTTP Client</title>
+  <desc id="client-desc">A&amp;I Backend Visual Lab에서 HTTP Client 책임을 나타내는 선형 아이콘</desc>
+  <metadata>Source: A&amp;I Backend Visual Lab; License: project-local educational asset; redistribution follows repository terms.</metadata>
+  <g fill="none" stroke="#0C2691" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4M6 8h.01"/></g>
+</svg>

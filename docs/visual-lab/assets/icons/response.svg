@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="response-title response-desc">
+  <title id="response-title">HTTP response</title>
+  <desc id="response-desc">A&amp;I Backend Visual Lab에서 HTTP response 책임을 나타내는 선형 아이콘</desc>
+  <metadata>Source: A&amp;I Backend Visual Lab; License: project-local educational asset; redistribution follows repository terms.</metadata>
+  <g fill="none" stroke="#0C2691" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10v18H7zM10 8h4M10 12h4"/><path d="M10 17H3m0 0 3-3m-3 3 3 3"/></g>
+</svg>

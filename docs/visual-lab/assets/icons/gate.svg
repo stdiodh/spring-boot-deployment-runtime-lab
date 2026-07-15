@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="gate-title gate-desc">
+  <title id="gate-title">Decision gate</title>
+  <desc id="gate-desc">A&amp;I Backend Visual Lab에서 Decision gate 책임을 나타내는 선형 아이콘</desc>
+  <metadata>Source: A&amp;I Backend Visual Lab; License: project-local educational asset; redistribution follows repository terms.</metadata>
+  <g fill="none" stroke="#0C2691" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 10-9 10L3 12zM8 12h8M12 8v8"/></g>
+</svg>

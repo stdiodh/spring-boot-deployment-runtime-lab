@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 500" role="img" aria-labelledby="title desc">
+  <title id="title">Source에서 Spring Boot process까지의 빌드와 실행 순서</title>
+  <desc id="desc">Source code에서 jar와 Docker image를 만들고, image에서 container를 생성한 뒤 Spring Boot process를 실행합니다. 환경 설정은 container 실행 시점에 주입됩니다.</desc>
+  <metadata>Source: A&amp;I Sequence 09 theory, implementation, checklist. License: repository policy; no standalone license grant.</metadata>
+  <defs>
+    <marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto">
+      <path d="M0 0 12 6 0 12Z" fill="#2955e4"/>
+    </marker>
+  </defs>
+  <rect width="720" height="500" rx="22" fill="#f1f7ff"/>
+  <text x="24" y="45" fill="#111b3f" font-family="system-ui, sans-serif" font-size="30" font-weight="850">BUILD → RUNTIME</text>
+  <text x="24" y="83" fill="#0c2691" font-family="system-ui, sans-serif" font-size="24" font-weight="800">BUILD · 산출물 생성</text>
+  <text x="414" y="83" fill="#0c2691" font-family="system-ui, sans-serif" font-size="24" font-weight="800">RUNTIME · 실행</text>
+
+  <rect x="20" y="105" width="120" height="126" rx="14" fill="#ffffff" stroke="#6473a0" stroke-width="3"/>
+  <text x="80" y="143" text-anchor="middle" fill="#0c2691" font-family="system-ui, sans-serif" font-size="24" font-weight="900">1</text>
+  <text x="80" y="177" text-anchor="middle" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24" font-weight="800">SOURCE</text>
+  <text x="80" y="209" text-anchor="middle" fill="#4b587c" font-family="system-ui, sans-serif" font-size="24">CODE</text>
+
+  <path d="M140 168H155" stroke="#2955e4" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="160" y="105" width="120" height="126" rx="14" fill="#ffffff" stroke="#2955e4" stroke-width="3"/>
+  <text x="220" y="143" text-anchor="middle" fill="#0c2691" font-family="system-ui, sans-serif" font-size="24" font-weight="900">2</text>
+  <text x="220" y="177" text-anchor="middle" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24" font-weight="800">JAR</text>
+  <text x="220" y="209" text-anchor="middle" fill="#4b587c" font-family="system-ui, sans-serif" font-size="24">실행 파일</text>
+
+  <path d="M280 168H295" stroke="#2955e4" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="300" y="105" width="120" height="126" rx="14" fill="#ffffff" stroke="#2955e4" stroke-width="3"/>
+  <text x="360" y="143" text-anchor="middle" fill="#0c2691" font-family="system-ui, sans-serif" font-size="24" font-weight="900">3</text>
+  <text x="360" y="177" text-anchor="middle" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24" font-weight="800">DOCKER</text>
+  <text x="360" y="209" text-anchor="middle" fill="#4b587c" font-family="system-ui, sans-serif" font-size="24">IMAGE</text>
+
+  <path d="M420 168H435" stroke="#2955e4" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="440" y="105" width="120" height="126" rx="14" fill="#ecfbfa" stroke="#2955e4" stroke-width="3"/>
+  <text x="500" y="143" text-anchor="middle" fill="#0c2691" font-family="system-ui, sans-serif" font-size="24" font-weight="900">4</text>
+  <text x="500" y="177" text-anchor="middle" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24" font-weight="800">실행 중</text>
+  <text x="500" y="209" text-anchor="middle" fill="#4b587c" font-family="system-ui, sans-serif" font-size="24">컨테이너</text>
+
+  <path d="M560 168H575" stroke="#2955e4" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="580" y="105" width="120" height="126" rx="14" fill="#ecfbfa" stroke="#0c2691" stroke-width="3"/>
+  <text x="640" y="143" text-anchor="middle" fill="#0c2691" font-family="system-ui, sans-serif" font-size="24" font-weight="900">5</text>
+  <text x="640" y="177" text-anchor="middle" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24" font-weight="800">SPRING</text>
+  <text x="640" y="209" text-anchor="middle" fill="#4b587c" font-family="system-ui, sans-serif" font-size="24">PROCESS</text>
+
+  <rect x="310" y="275" width="300" height="100" rx="14" fill="#ffffff" stroke="#6473a0" stroke-width="3"/>
+  <text x="460" y="316" text-anchor="middle" fill="#0c2691" font-family="system-ui, sans-serif" font-size="26" font-weight="900">ENV / CONFIG</text>
+  <text x="460" y="351" text-anchor="middle" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24">container 시작 시 주입</text>
+  <path d="M500 275V241" stroke="#2955e4" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <rect x="20" y="410" width="680" height="66" rx="13" fill="#0c2691"/>
+  <text x="360" y="452" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="24" font-weight="800">판단 증거 · container 상태 + application log</text>
+</svg>

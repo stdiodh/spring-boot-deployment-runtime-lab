@@ -9,6 +9,28 @@ window.visualLabData = {
     "kind": "runtime",
     "title": "Runtime Boundary",
     "instruction": "실행 조건을 바꿔 jar, image, container, 설정, 로그 중 어디까지 도달하는지 확인하세요.",
+    "visual": {
+      "src": "../../assets/diagrams/09-runtime-nesting.svg",
+      "alt": "Source code가 jar와 Docker image로 빌드되고 image로부터 container와 Spring Boot process가 순서대로 생성되며 실행 시 환경 설정이 container에 주입되는 구조",
+      "caption": "Source→jar→image는 빌드 경로이고 image→container→process는 실행 경로입니다. 환경 설정은 container 실행 시점에 전달됩니다."
+    },
+    "terms": [
+      { "term": "jar", "meaning": "Spring Boot 코드와 실행에 필요한 파일을 하나로 묶은 실행 파일" },
+      { "term": "image", "meaning": "jar와 실행 환경을 담았지만 아직 실행되지는 않은 배포 패키지" },
+      { "term": "container", "meaning": "image로 만든 실행 중인 격리 단위" },
+      { "term": "process", "meaning": "container 안에서 실제로 동작하는 Spring Boot 프로그램" }
+    ],
+    "comparison": {
+      "label": "실행 전 산출물과 실행 중 인스턴스",
+      "left": {
+        "title": "jar · image",
+        "body": "빌드 시점에 만들어지는 실행 전 산출물입니다. 생성 성공만으로 애플리케이션 정상 실행을 뜻하지 않습니다."
+      },
+      "right": {
+        "title": "container · process",
+        "body": "image에서 생성되어 실제로 동작하는 실행 단위입니다. 상태와 애플리케이션 로그를 증거로 확인합니다."
+      }
+    },
     "nodes": {
       "source-code": {
         "label": "Source code",
@@ -140,10 +162,20 @@ window.visualLabData = {
     "scenarios": [
       {
         "id": "runtime-ready",
-        "label": "컨테이너 실행 확인",
+        "label": "jar·image 준비됨",
         "flowId": "jar-to-container",
         "tone": "recovered",
-        "prompt": "테스트를 통과한 jar를 image로 묶고 컨테이너 상태와 로그까지 확인합니다.",
+        "prompt": "테스트를 통과한 jar와 Docker image가 준비되었습니다. 운영 실행을 판단할 다음 증거를 예측합니다.",
+        "prediction": {
+          "prompt": "어디까지 확인해야 ‘운영에서 실행됐다’고 판단할 수 있을까요?",
+          "options": [
+            { "id": "jar", "label": "jar가 생성된 시점" },
+            { "id": "image", "label": "Docker image가 생성된 시점" },
+            { "id": "runtime", "label": "container 상태와 애플리케이션 로그를 확인한 시점" }
+          ],
+          "answer": "runtime",
+          "explanation": "jar와 image는 실행 전 산출물입니다. container 안의 process 상태와 로그가 연결되어야 runtime 성공을 판단할 수 있습니다."
+        },
         "route": [
           "Source code",
           "./gradlew test bootJar",
@@ -268,10 +300,20 @@ window.visualLabData = {
       },
       {
         "id": "runtime-test-failed",
-        "label": "테스트에서 차단",
+        "label": "Gradle 테스트 실패",
         "flowId": "jar-to-container",
         "tone": "blocked",
-        "prompt": "배포 전 테스트가 실패한 상태에서 다음 실행 단위로 넘어갈 수 있는지 판단합니다.",
+        "prompt": "배포 전 `./gradlew test`가 실패했습니다. image나 container로 범위를 넓히기 전에 어떤 증거를 볼지 예측합니다.",
+        "prediction": {
+          "prompt": "테스트 실패 뒤 가장 먼저 확인할 경계는 어디일까요?",
+          "options": [
+            { "id": "test", "label": "처음 실패한 테스트" },
+            { "id": "image", "label": "Docker image 생성 로그" },
+            { "id": "container", "label": "container 실행 상태" }
+          ],
+          "answer": "test",
+          "explanation": "테스트가 build gate를 통과하지 못했으므로 jar·image·container 경로는 아직 시작되지 않았습니다."
+        },
         "route": [
           "Source code",
           "./gradlew test",
@@ -338,6 +380,16 @@ window.visualLabData = {
         "flowId": "jar-to-container",
         "tone": "blocked",
         "prompt": "bootJar 결과와 Dockerfile의 COPY 경로가 다를 때 build 경계를 추적합니다.",
+        "prediction": {
+          "prompt": "이 조건에서 실제로 도달하지 못한 첫 실행 단위는 무엇일까요?",
+          "options": [
+            { "id": "jar", "label": "jar 생성" },
+            { "id": "image", "label": "Docker image 생성" },
+            { "id": "process", "label": "Spring Boot process 시작" }
+          ],
+          "answer": "image",
+          "explanation": "jar는 존재하지만 COPY 입력 경로가 맞지 않아 image build에서 멈춥니다. runtime 문제로 확대하면 안 됩니다."
+        },
         "route": [
           "./gradlew bootJar",
           "build/libs/*.jar",
@@ -424,6 +476,16 @@ window.visualLabData = {
         "flowId": "runtime-config",
         "tone": "blocked",
         "prompt": "prod profile이 요구하는 환경변수가 빠졌을 때 실행과 health 증거를 구분합니다.",
+        "prediction": {
+          "prompt": "container 명령이 끝났다면 배포가 정상이라고 볼 수 있을까요?",
+          "options": [
+            { "id": "command", "label": "명령이 끝났으므로 정상" },
+            { "id": "port", "label": "포트가 열렸으면 정상" },
+            { "id": "evidence", "label": "로그와 health 증거 전에는 보류" }
+          ],
+          "answer": "evidence",
+          "explanation": "환경변수 누락은 process 시작 뒤 설정 바인딩에서 드러날 수 있습니다. 실행 명령 종료와 애플리케이션 정상 상태는 다릅니다."
+        },
         "route": [
           "Compose runtime",
           "Environment variables",

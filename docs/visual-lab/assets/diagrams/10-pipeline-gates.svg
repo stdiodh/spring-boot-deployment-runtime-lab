@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 500" role="img" aria-labelledby="title desc">
+  <title id="title">build, deploy, verify 파이프라인 게이트</title>
+  <desc id="desc">build가 release bundle을 만들고 deploy가 서버의 container를 갱신합니다. check-deploy는 compose 상태와 로그를 출력하고 curl fail의 HTTP 성공 여부로 마지막 gate를 판정합니다.</desc>
+  <metadata>Source: A&amp;I Sequence 10 theory, implementation, checklist, scripts/check-deploy.sh. License: repository policy; no standalone license grant.</metadata>
+  <defs>
+    <marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto">
+      <path d="M0 0 12 6 0 12Z" fill="#2955e4"/>
+    </marker>
+  </defs>
+  <rect width="720" height="500" rx="22" fill="#f1f7ff"/>
+  <text x="24" y="46" fill="#111b3f" font-family="system-ui, sans-serif" font-size="30" font-weight="850">PIPELINE · THREE GATES</text>
+
+  <rect x="20" y="82" width="210" height="275" rx="16" fill="#ffffff" stroke="#0c2691" stroke-width="3"/>
+  <text x="125" y="126" text-anchor="middle" fill="#0c2691" font-family="system-ui, sans-serif" font-size="28" font-weight="900">1 · BUILD</text>
+  <text x="44" y="177" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24">test</text>
+  <text x="44" y="219" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24">bootJar</text>
+  <rect x="40" y="253" width="170" height="74" rx="11" fill="#eaf0fb" stroke="#6473a0" stroke-width="3"/>
+  <text x="125" y="284" text-anchor="middle" fill="#0c2691" font-family="system-ui, sans-serif" font-size="24" font-weight="800">release</text>
+  <text x="125" y="314" text-anchor="middle" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24">bundle</text>
+
+  <path d="M230 219H250" stroke="#2955e4" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="255" y="82" width="210" height="275" rx="16" fill="#ffffff" stroke="#0c2691" stroke-width="3"/>
+  <text x="360" y="126" text-anchor="middle" fill="#0c2691" font-family="system-ui, sans-serif" font-size="28" font-weight="900">2 · DEPLOY</text>
+  <text x="279" y="177" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24">release 배치</text>
+  <text x="279" y="219" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24">container</text>
+  <text x="279" y="257" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24">갱신</text>
+  <text x="279" y="316" fill="#4b587c" font-family="ui-monospace, monospace" font-size="24">deploy.sh</text>
+
+  <path d="M465 219H485" stroke="#2955e4" stroke-width="4" marker-end="url(#arrow)"/>
+  <rect x="490" y="82" width="210" height="275" rx="16" fill="#ecfbfa" stroke="#0c2691" stroke-width="3"/>
+  <text x="595" y="126" text-anchor="middle" fill="#0c2691" font-family="system-ui, sans-serif" font-size="28" font-weight="900">3 · VERIFY</text>
+  <text x="514" y="177" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24">ps 출력</text>
+  <text x="514" y="219" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24">log 출력</text>
+  <text x="514" y="261" fill="#111b3f" font-family="system-ui, sans-serif" font-size="24">curl --fail</text>
+  <text x="595" y="306" text-anchor="middle" fill="#4b587c" font-family="ui-monospace, monospace" font-size="24">check-deploy</text>
+  <text x="595" y="334" text-anchor="middle" fill="#4b587c" font-family="ui-monospace, monospace" font-size="24">.sh</text>
+
+  <rect x="20" y="391" width="680" height="86" rx="13" fill="#0c2691"/>
+  <text x="360" y="426" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="24" font-weight="800">ps·log · 출력 관찰, 내용 자동 판정 없음</text>
+  <text x="360" y="460" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-size="24" font-weight="800">HTTP · curl --fail 성공이 최종 gate</text>
+</svg>

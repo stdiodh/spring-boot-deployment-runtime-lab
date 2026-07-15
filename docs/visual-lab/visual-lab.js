@@ -9,11 +9,6 @@
   }
 
   const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const playbackSpeeds = [
-    { label: "1x", ms: 2400 },
-    { label: "1.5x", ms: 1600 },
-    { label: "2x", ms: 1000 },
-  ];
   const kindLabels = {
     request: "요청 검사기",
     "request-trace": "요청 패킷 추적",
@@ -51,10 +46,9 @@
     scenarioIndex: 0,
     flowIndex: 0,
     stepIndex: 0,
-    speedIndex: 0,
-    isPlaying: false,
-    timerId: 0,
     checked: new Set(),
+    predictions: new Map(),
+    revealedScenarios: new Set(),
   };
   let sectionObserver = null;
 
@@ -293,21 +287,32 @@
     return normalized;
   }
 
+  function scenarioKey(scenario) {
+    return scenario.id || `scenario-${state.scenarioIndex}`;
+  }
+
+  function isScenarioRevealed(scenario) {
+    return state.revealedScenarios.has(scenarioKey(scenario));
+  }
+
   function iconAssetHref(iconName) {
-    const base = data.kind === "sequence" ? "../../assets/system-icons.svg" : "./assets/system-icons.svg";
-    return `${base}#icon-${iconName || "service"}`;
+    const base = data.kind === "sequence" ? "../../assets/icons" : "./assets/icons";
+    return `${base}/${iconName || "service"}.svg`;
   }
 
   function createSystemIcon(iconName, className) {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("aria-hidden", "true");
-    svg.setAttribute("focusable", "false");
-    svg.classList.add(className || "system-icon");
-    use.setAttribute("href", iconAssetHref(iconName));
-    svg.appendChild(use);
-    return svg;
+    const image = createElement("img", className || "system-icon");
+    image.src = iconAssetHref(iconName);
+    image.alt = "";
+    image.width = 24;
+    image.height = 24;
+    image.decoding = "async";
+    image.addEventListener("error", () => {
+      const fallback = createElement("span", `${className || "system-icon"} system-icon--fallback`, "●");
+      fallback.setAttribute("aria-hidden", "true");
+      image.replaceWith(fallback);
+    });
+    return image;
   }
 
   function updateLiveStatus(message) {
@@ -366,44 +371,6 @@
       seen.add(key);
       return true;
     });
-  }
-
-  function clearPlaybackTimer() {
-    if (state.timerId) {
-      window.clearTimeout(state.timerId);
-      state.timerId = 0;
-    }
-  }
-
-  function schedulePlayback(sequence) {
-    clearPlaybackTimer();
-    const steps = currentSteps(sequence);
-    const lane = currentLaneContext(sequence);
-    if (!state.isPlaying || motionQuery.matches || lane.length <= 1) {
-      return;
-    }
-    state.timerId = window.setTimeout(() => {
-      const activeElement = document.activeElement;
-      const activeFocusKey = activeElement && activeElement.dataset
-        ? activeElement.dataset.focusKey
-        : "";
-      if (activeFocusKey !== "play") {
-        state.isPlaying = false;
-        const playControl = document.querySelector('[data-focus-key="play"]');
-        if (playControl) {
-          playControl.textContent = "재생";
-          playControl.setAttribute("aria-pressed", "false");
-        }
-        return;
-      }
-      if (state.stepIndex >= lane.end) {
-        state.isPlaying = false;
-        render({ focusKey: activeFocusKey });
-        return;
-      }
-      state.stepIndex += 1;
-      render({ focusKey: activeFocusKey });
-    }, playbackSpeeds[state.speedIndex].ms);
   }
 
   function renderTopbar(root, sequence) {
@@ -533,10 +500,7 @@
     }[routeStateName];
   }
 
-  function semanticStepState(index, laneId, activeStep) {
-    if (activeStep._laneId && activeStep._laneId !== laneId) {
-      return "available";
-    }
+  function semanticStepState(index) {
     if (index < state.stepIndex) {
       return "passed";
     }
@@ -546,11 +510,13 @@
     return "pending";
   }
 
-  function renderSemanticNode(sequence, nodeId, position) {
+  function renderSemanticNode(sequence, nodeId, activeStep) {
     const node = diagramNode(sequence, nodeId);
-    const card = createElement("div", "semantic-node");
-    card.dataset.position = position;
+    const card = createElement("li", "semantic-node");
     card.dataset.kind = String(node.kind || "actor").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
+    if (activeStep && (activeStep.from === node.label || activeStep.to === node.label)) {
+      card.dataset.current = "true";
+    }
 
     const iconWrap = createElement("span", "semantic-node__icon");
     iconWrap.appendChild(createSystemIcon(node.icon));
@@ -559,113 +525,152 @@
       createElement("strong", "semantic-node__label", node.label),
       createElement("span", "semantic-node__kind", node.kind)
     );
-    const heading = createElement("span", "semantic-node__heading");
-    heading.append(iconWrap, identity);
-    card.append(
-      heading,
-      createElement("span", "semantic-node__role", node.role),
-      createElement("span", "semantic-node__boundary", `책임 경계 · ${node.boundary}`)
-    );
+    card.append(iconWrap, identity, createElement("span", "semantic-node__boundary", node.boundary));
+    card.title = node.role;
     return card;
   }
 
-  function renderSemanticLegend() {
-    const legend = createElement("div", "diagram-legend");
-    legend.setAttribute("aria-label", "다이어그램 읽는 법");
-    const items = [
-      ["service", "책임 주체", "아이콘 상자는 실제로 행동하는 주체입니다."],
-      ["event", "동작 · 전달물", "화살표는 방향, 동사, 이동 데이터를 함께 보여줍니다."],
-      ["gate", "책임 경계", "주체 아래 표시는 판단이 일어나는 시스템 경계입니다."],
-    ];
-    items.forEach(([icon, label, description]) => {
-      const item = createElement("div", "diagram-legend__item");
-      const iconWrap = createElement("span", "diagram-legend__icon");
-      iconWrap.appendChild(createSystemIcon(icon));
-      const copy = createElement("span", "diagram-legend__copy");
-      copy.append(createElement("strong", "", label), createElement("span", "", description));
-      item.append(iconWrap, copy);
-      legend.appendChild(item);
-    });
-    return legend;
+  function laneStartIndex(diagram, selectedLaneIndex) {
+    return list(diagram.lanes)
+      .slice(0, selectedLaneIndex)
+      .reduce((total, lane) => total + list(lane.steps).length, 0);
   }
 
   function renderSemanticDiagram(sequence, scenario) {
     const diagram = semanticDiagram(scenario);
     const activeStep = currentStep(sequence);
+    const lanesData = list(diagram.lanes);
+    const activeLaneIndex = Math.max(
+      0,
+      lanesData.findIndex((lane, index) => (lane.id || `lane-${index + 1}`) === activeStep._laneId)
+    );
+    const activeLane = lanesData[activeLaneIndex] || { steps: [] };
+    const laneSteps = semanticSteps(sequence, scenario).filter((step) => step._laneIndex === activeLaneIndex).slice(0, 7);
     const figure = createElement("figure", "semantic-diagram");
     figure.setAttribute("aria-label", "선택한 조건의 의미 기반 시스템 경로");
 
     const reading = createElement("figcaption", "diagram-reading");
     reading.append(
-      createElement("span", "diagram-reading__label", "한 문장으로 읽기"),
+      createElement("span", "diagram-reading__label", "SYSTEM STORY"),
       createElement("strong", "diagram-reading__text", diagram.caption)
     );
-    figure.append(reading, renderSemanticLegend());
+    figure.appendChild(reading);
 
-    const lanes = createElement("div", "diagram-lanes");
-    let globalIndex = 0;
-    list(diagram.lanes).forEach((lane, laneIndex) => {
-      const laneSection = createElement("section", "diagram-lane");
-      const laneHeadingId = `diagram-lane-${scenario.id || state.scenarioIndex}-${lane.id || laneIndex}`;
-      laneSection.setAttribute("aria-labelledby", laneHeadingId);
-      const header = createElement("header", "diagram-lane__header");
-      const laneTitle = createElement("h4", "", lane.label || `경로 ${laneIndex + 1}`);
-      laneTitle.id = laneHeadingId;
-      header.append(laneTitle, createElement("p", "", lane.description || "이 경로에서 전달되는 책임과 데이터를 확인합니다."));
-      laneSection.appendChild(header);
-
-      const flow = createElement("ol", "semantic-flow");
-      list(lane.steps).forEach((edge) => {
-        const edgeIndex = globalIndex;
-        const laneId = lane.id || `lane-${laneIndex + 1}`;
-        const edgeState = semanticStepState(edgeIndex, laneId, activeStep);
-        const fromNode = diagramNode(sequence, edge.from);
-        const toNode = diagramNode(sequence, edge.to);
-        const transition = createElement("li", "semantic-transition");
-        transition.dataset.state = edgeState;
-        transition.dataset.kind = edge.kind || "call";
-
-        const edgeButton = createElement("button", "semantic-edge");
-        edgeButton.type = "button";
-        edgeButton.dataset.focusKey = `diagram-step-${edgeIndex}`;
-        edgeButton.setAttribute(
-          "aria-label",
-          `${fromNode.label}에서 ${toNode.label}로 ${edge.verb}: ${edge.payload}. ${routeStateLabel(edgeState)}`
-        );
-        if (edgeState === "active") {
-          edgeButton.setAttribute("aria-current", "step");
-        }
-        const edgeHead = createElement("span", "semantic-edge__head");
-        edgeHead.append(
-          createElement("strong", "semantic-edge__verb", edge.verb || edgeKindLabels[edge.kind] || "전달"),
-          createElement("span", "semantic-edge__kind", edgeKindLabels[edge.kind] || "전달")
-        );
-        const direction = createElement("span", "semantic-edge__direction");
-        direction.setAttribute("aria-hidden", "true");
-        edgeButton.append(
-          edgeHead,
-          createElement("code", "semantic-edge__payload", edge.payload || "전달 단위 확인"),
-          direction,
-          createElement("span", "semantic-edge__state", routeStateLabel(edgeState))
-        );
-        edgeButton.addEventListener("click", () => {
-          state.stepIndex = edgeIndex;
-          state.isPlaying = false;
-          render({ focusKey: `diagram-step-${edgeIndex}` });
+    if (lanesData.length > 1) {
+      const laneSelector = createElement("div", "story-lanes");
+      laneSelector.setAttribute("role", "group");
+      laneSelector.setAttribute("aria-label", "관찰할 시스템 경로");
+      lanesData.forEach((lane, laneIndex) => {
+        const laneButton = createElement("button", "story-lane-button", lane.label || `경로 ${laneIndex + 1}`);
+        laneButton.type = "button";
+        laneButton.dataset.focusKey = `lane-${laneIndex}`;
+        laneButton.setAttribute("aria-pressed", String(laneIndex === activeLaneIndex));
+        laneButton.addEventListener("click", () => {
+          state.stepIndex = laneStartIndex(diagram, laneIndex);
+          render({ focusKey: `lane-${laneIndex}` });
         });
-
-        transition.append(
-          renderSemanticNode(sequence, edge.from, "from"),
-          edgeButton,
-          renderSemanticNode(sequence, edge.to, "to")
-        );
-        flow.appendChild(transition);
-        globalIndex += 1;
+        laneSelector.appendChild(laneButton);
       });
-      laneSection.appendChild(flow);
-      lanes.appendChild(laneSection);
+      figure.appendChild(laneSelector);
+    }
+
+    const board = createElement("section", "story-board");
+    const boardHeader = createElement("header", "story-board__header");
+    boardHeader.append(
+      createElement("h4", "", activeLane.label || `경로 ${activeLaneIndex + 1}`),
+      createElement("p", "", activeLane.description || "이 경로의 주체와 전달 단위를 확인합니다.")
+    );
+    board.appendChild(boardHeader);
+
+    const nodeIds = [];
+    list(activeLane.steps).forEach((edge) => {
+      [edge.from, edge.to].forEach((nodeId) => {
+        if (nodeId && !nodeIds.includes(nodeId)) {
+          nodeIds.push(nodeId);
+        }
+      });
     });
-    figure.appendChild(lanes);
+    const topology = createElement("ol", "story-topology");
+    topology.setAttribute("aria-label", `${activeLane.label || "현재 경로"}의 책임 주체`);
+    nodeIds.forEach((nodeId) => topology.appendChild(renderSemanticNode(sequence, nodeId, activeStep)));
+    board.appendChild(topology);
+
+    const transitions = createElement("ol", "story-transitions");
+    transitions.setAttribute("aria-label", "현재 경로의 전이 단계");
+    laneSteps.forEach((step) => {
+      const edgeState = semanticStepState(step._globalIndex);
+      const item = createElement("li", "story-transition");
+      item.dataset.state = edgeState;
+      item.dataset.kind = step.kind || "call";
+      const button = createElement("button", "story-transition__button");
+      button.type = "button";
+      button.dataset.focusKey = `diagram-step-${step._globalIndex}`;
+      button.setAttribute("aria-label", `${step._laneStepIndex + 1}단계, ${step.from}에서 ${step.to}로 ${step.verb}: ${step.payload}. ${routeStateLabel(edgeState)}`);
+      if (edgeState === "active") {
+        button.setAttribute("aria-current", "step");
+      }
+      button.append(
+        createElement("span", "story-transition__number", String(step._laneStepIndex + 1).padStart(2, "0")),
+        createElement("strong", "story-transition__route", `${step.from} → ${step.to}`),
+        createElement("span", "story-transition__verb", step.verb),
+        createElement("code", "story-transition__payload", step.payload)
+      );
+      button.addEventListener("click", () => {
+        state.stepIndex = step._globalIndex;
+        render({ focusKey: `diagram-step-${step._globalIndex}` });
+      });
+      item.appendChild(button);
+      transitions.appendChild(item);
+    });
+    board.appendChild(transitions);
+
+    const current = createElement("div", "story-current");
+    const transition = createElement("article", "story-current__transition");
+    transition.append(
+      createElement("p", "story-current__label", `현재 전이 · ${activeStep._laneStepIndex + 1} / ${activeStep._laneStepCount}`),
+      createElement("h5", "", `${activeStep.from} → ${activeStep.to}`),
+      createElement("p", "story-current__action", `${activeStep.verb} · ${activeStep.payload}`)
+    );
+    const reason = createElement("aside", "story-current__reason");
+    reason.append(
+      createElement("p", "story-current__label", "이 단계에서 판단할 것"),
+      createElement("strong", "", activeStep.concept || activeStep.note || "현재 책임 경계를 확인합니다."),
+      createElement("p", "", activeStep.check || "입력과 출력 증거를 확인합니다.")
+    );
+    current.append(transition, reason);
+    board.appendChild(current);
+
+    const lane = currentLaneContext(sequence);
+    const controls = createElement("div", "trace-controls");
+    const previous = createElement("button", "control-button", "← 이전 단계");
+    previous.type = "button";
+    previous.dataset.focusKey = "previous";
+    previous.disabled = lane.index === 0 || lane.length === 0;
+    previous.addEventListener("click", () => {
+      state.stepIndex = Math.max(lane.start, state.stepIndex - 1);
+      render({ focusKey: state.stepIndex === lane.start ? "next-step" : "previous" });
+    });
+    const progressWrap = createElement("div", "trace-progress");
+    const progress = createElement("progress", "trace-progress__bar");
+    progress.max = Math.max(lane.length, 1);
+    progress.value = lane.length ? lane.index + 1 : 0;
+    progress.setAttribute("aria-label", `${lane.label}, 현재 단계 ${lane.length ? lane.index + 1 : 0} / ${lane.length}`);
+    progressWrap.append(progress, createElement("span", "trace-progress__text", `${lane.label} · ${lane.length ? lane.index + 1 : 0} / ${lane.length}`));
+    const next = createElement("button", "control-button", "다음 단계 →");
+    next.type = "button";
+    next.dataset.focusKey = "next-step";
+    next.disabled = lane.index >= lane.length - 1 || lane.length === 0;
+    next.addEventListener("click", () => {
+      state.stepIndex = Math.min(lane.end, state.stepIndex + 1);
+      render({ focusKey: state.stepIndex === lane.end ? "previous" : "next-step" });
+    });
+    controls.append(previous, progressWrap, next);
+    board.appendChild(controls);
+    figure.appendChild(board);
+
+    if (list(activeLane.steps).length > 7) {
+      figure.appendChild(createElement("p", "story-limit-note", "이 화면은 판단 부담을 줄이기 위해 현재 경로의 처음 7개 전이만 표시합니다."));
+    }
 
     if (list(diagram.notReached).length) {
       const notReached = createElement("aside", "not-reached");
@@ -682,6 +687,145 @@
     return figure;
   }
 
+  function renderTopicVisual(workbench) {
+    const visual = workbench.visual;
+    if (!visual || !visual.src) {
+      return null;
+    }
+    const figure = createElement("figure", "topic-visual");
+    const image = createElement("img", "topic-visual__image");
+    image.src = visual.src;
+    image.alt = visual.alt || "현재 시퀀스의 시스템 경계 다이어그램";
+    image.decoding = "async";
+    image.addEventListener("error", () => {
+      const fallback = createElement("p", "topic-visual__fallback", `${image.alt} — 다이어그램 파일을 불러오지 못했습니다.`);
+      image.replaceWith(fallback);
+    });
+    const caption = createElement("figcaption", "topic-visual__caption");
+    caption.append(
+      createElement("strong", "", visual.caption || image.alt),
+      createElement("span", "", "저장소 로컬 SVG · A&I Backend Visual Lab")
+    );
+    const viewport = createElement("div", "topic-visual__viewport");
+    viewport.appendChild(image);
+    figure.append(viewport, caption);
+    return figure;
+  }
+
+  function renderTerms(workbench) {
+    const terms = list(workbench.terms);
+    if (!terms.length) {
+      return null;
+    }
+    const section = createElement("details", "term-ribbon");
+    section.appendChild(createElement("summary", "term-ribbon__summary", `먼저 확인할 용어 ${terms.length}개`));
+    const glossary = createElement("dl", "term-ribbon__list");
+    terms.forEach((item) => {
+      const entry = createElement("div", "term-ribbon__entry");
+      entry.append(createElement("dt", "", item.term), createElement("dd", "", item.meaning));
+      glossary.appendChild(entry);
+    });
+    section.appendChild(glossary);
+    return section;
+  }
+
+  function renderPrediction(scenario) {
+    const prediction = scenario.prediction || {};
+    const options = list(prediction.options);
+    const key = scenarioKey(scenario);
+    const selectedId = state.predictions.get(key) || "";
+    const revealed = isScenarioRevealed(scenario);
+    const panel = createElement("section", "prediction-panel");
+    const headingId = `prediction-${key}`;
+    const heading = createElement("h4", "", revealed ? "내 예상과 실제 경로 비교" : "경로를 보기 전에 먼저 예상하세요");
+    heading.id = headingId;
+    panel.setAttribute("aria-labelledby", headingId);
+    panel.append(
+      createElement("p", "prediction-panel__step", revealed ? "PREDICT → OBSERVE" : "PREDICT 01"),
+      heading,
+      createElement("p", "prediction-panel__prompt", prediction.prompt || "이 조건에서 요청은 어디까지 도달하고 무엇이 남을까요?")
+    );
+
+    if (!options.length) {
+      panel.appendChild(createElement("p", "prediction-panel__missing", "예상 선택지가 없습니다. 시퀀스 데이터의 prediction.options를 확인하세요."));
+      return panel;
+    }
+
+    const optionGroup = createElement("div", "prediction-options");
+    optionGroup.setAttribute("role", "radiogroup");
+    optionGroup.setAttribute("aria-label", prediction.prompt || "결과 예상");
+    options.forEach((option) => {
+      const label = createElement("label", "prediction-option");
+      const input = createElement("input", "prediction-option__input");
+      input.type = "radio";
+      input.name = `prediction-${key}`;
+      input.value = option.id;
+      input.checked = selectedId === option.id;
+      input.disabled = revealed;
+      const copy = createElement("span", "prediction-option__copy", option.label);
+      input.addEventListener("change", () => {
+        state.predictions.set(key, option.id);
+        const reveal = panel.querySelector(".prediction-panel__reveal");
+        if (reveal) {
+          reveal.disabled = false;
+        }
+      });
+      label.append(input, copy);
+      if (revealed && option.id === prediction.answer) {
+        label.dataset.answer = "true";
+      }
+      if (revealed && option.id === selectedId) {
+        label.dataset.selected = "true";
+      }
+      optionGroup.appendChild(label);
+    });
+    panel.appendChild(optionGroup);
+
+    if (revealed) {
+      const selected = options.find((option) => option.id === selectedId);
+      const result = createElement("div", "prediction-result");
+      result.dataset.correct = String(selectedId === prediction.answer);
+      result.append(
+        createElement("strong", "", selectedId === prediction.answer ? "예상과 경로가 일치합니다" : "예상과 다른 지점을 찾아보세요"),
+        createElement("p", "", selected ? `내 예상: ${selected.label}` : "선택한 예상이 없습니다."),
+        createElement("p", "", prediction.explanation || "아래 경로에서 요청이 멈추거나 상태가 바뀌는 지점을 확인하세요.")
+      );
+      panel.appendChild(result);
+    } else {
+      const reveal = createElement("button", "prediction-panel__reveal", "예상 확정 · 경로 보기 →");
+      reveal.type = "button";
+      reveal.dataset.focusKey = "reveal";
+      reveal.disabled = !selectedId;
+      reveal.addEventListener("click", () => {
+        if (!state.predictions.get(key)) {
+          return;
+        }
+        state.revealedScenarios.add(key);
+        render({ focusKey: `diagram-step-${state.stepIndex}` });
+      });
+      panel.appendChild(reveal);
+    }
+    return panel;
+  }
+
+  function renderComparison(workbench) {
+    const comparison = workbench.comparison;
+    if (!comparison || !comparison.left || !comparison.right) {
+      return null;
+    }
+    const section = createElement("section", "topic-comparison");
+    section.appendChild(createElement("h4", "", comparison.label || "이 시퀀스에서 구분할 두 경계"));
+    const grid = createElement("div", "topic-comparison__grid");
+    [comparison.left, comparison.right].forEach((item, index) => {
+      const article = createElement("article", "topic-comparison__item");
+      article.dataset.side = index === 0 ? "left" : "right";
+      article.append(createElement("strong", "", item.title), createElement("p", "", item.body));
+      grid.appendChild(article);
+    });
+    section.appendChild(grid);
+    return section;
+  }
+
   function renderWorkbench(main, sequence) {
     const workbench = normalizedWorkbench(sequence);
     const scenario = currentScenario(sequence);
@@ -689,6 +833,7 @@
     const steps = currentSteps(sequence);
     const route = scenarioRoute(sequence, scenario);
     const diagram = semanticDiagram(scenario);
+    const revealed = isScenarioRevealed(scenario);
 
     document.body.dataset.labKind = workbench.kind || "trace";
 
@@ -717,7 +862,6 @@
         state.scenarioIndex = index;
         state.flowIndex = flowIndexById(sequence, item.flowId);
         state.stepIndex = 0;
-        state.isPlaying = false;
         render({ focusKey: `scenario-${index}` });
       });
       scenarioButtons.appendChild(button);
@@ -726,15 +870,43 @@
     section.appendChild(scenarioFieldset);
 
     const stage = createElement("div", `workbench workbench--${workbench.kind || "trace"}`);
-    stage.dataset.tone = scenario.tone || "signal";
+    stage.dataset.tone = revealed ? scenario.tone || "signal" : "neutral";
     const stageHeader = createElement("div", "workbench__header");
     const stageTitle = createElement("div", "workbench__title");
     stageTitle.append(
-      createElement("span", `status-label status-label--${scenario.tone || "signal"}`, toneLabels[scenario.tone] || toneLabels.signal),
+      createElement(
+        "span",
+        `status-label status-label--${revealed ? scenario.tone || "signal" : "neutral"}`,
+        revealed ? toneLabels[scenario.tone] || toneLabels.signal : "예측 전 · 조건 선택됨"
+      ),
       createElement("h3", "", scenario.label || flow.title || "현재 흐름")
     );
     stageHeader.append(stageTitle, createElement("p", "workbench__prompt", scenario.prompt || flow.summary || sequence.problem));
     stage.appendChild(stageHeader);
+
+    const terms = renderTerms(workbench);
+    if (terms) {
+      stage.appendChild(terms);
+    }
+    stage.appendChild(renderPrediction(scenario));
+
+    if (!revealed) {
+      const locked = createElement("div", "story-locked");
+      locked.append(
+        createElement("strong", "", "예상을 선택하면 시스템 경로가 열립니다"),
+        createElement("p", "", "정답을 먼저 읽지 않고, 선택한 조건에서 요청이 멈추는 곳과 남는 상태를 예상해보세요.")
+      );
+      stage.appendChild(locked);
+      updateLiveStatus(`${scenario.label || "현재 조건"}: 예상 선택을 기다리고 있습니다.`);
+      section.appendChild(stage);
+      main.appendChild(section);
+      return;
+    }
+
+    const topicVisual = renderTopicVisual(workbench);
+    if (topicVisual) {
+      stage.appendChild(topicVisual);
+    }
 
     if (diagram) {
       stage.appendChild(renderSemanticDiagram(sequence, scenario));
@@ -764,7 +936,6 @@
             ? 0
             : Math.round((index / (route.length - 1)) * Math.max(steps.length - 1, 0));
           state.stepIndex = Math.max(0, Math.min(steps.length - 1, mappedStep));
-          state.isPlaying = false;
           render({ focusKey: `route-${index}` });
         });
         item.appendChild(button);
@@ -800,71 +971,10 @@
     decision.append(createElement("span", "outcome-label", "판단"), createElement("p", "", scenario.outcome || "선택한 단계의 확인 지점을 설명해보세요."));
     outcome.append(evidence, decision);
     stage.appendChild(outcome);
-
-    const controls = createElement("div", "trace-controls");
-    const lane = currentLaneContext(sequence);
-    const previousStep = steps[state.stepIndex - 1] || {};
-    const nextStep = steps[state.stepIndex + 1] || {};
-    const previousLabel = diagram && state.stepIndex > 0 && lane.index === 0
-      ? `← 이전 경로: ${previousStep._laneLabel || "이전 경로"}`
-      : "← 이전 단계";
-    const nextLabel = diagram && state.stepIndex < steps.length - 1 && lane.index === lane.length - 1
-      ? `다음 경로: ${nextStep._laneLabel || "다음 경로"} →`
-      : "다음 단계 →";
-    const previous = createElement("button", "control-button", previousLabel);
-    previous.type = "button";
-    previous.dataset.focusKey = "previous";
-    previous.disabled = state.stepIndex === 0 || steps.length === 0;
-    previous.addEventListener("click", () => {
-      state.stepIndex = Math.max(0, state.stepIndex - 1);
-      state.isPlaying = false;
-      render({ focusKey: state.stepIndex === 0 ? "next-step" : "previous" });
-    });
-
-    const progressWrap = createElement("div", "trace-progress");
-    const progress = createElement("progress", "trace-progress__bar");
-    progress.max = Math.max(lane.length, 1);
-    progress.value = lane.length ? lane.index + 1 : 0;
-    progress.setAttribute("aria-label", `${lane.label}, 현재 단계 ${lane.length ? lane.index + 1 : 0} / ${lane.length}`);
-    progressWrap.append(
-      progress,
-      createElement("span", "trace-progress__text", `${lane.label} · ${lane.length ? lane.index + 1 : 0} / ${lane.length}`)
-    );
-
-    const play = createElement("button", "control-button", motionQuery.matches ? "모션 감소: 수동" : state.isPlaying ? "일시정지" : "재생");
-    play.type = "button";
-    play.dataset.focusKey = "play";
-    play.disabled = lane.length <= 1 || motionQuery.matches;
-    play.setAttribute("aria-pressed", String(state.isPlaying));
-    play.addEventListener("click", () => {
-      if (!state.isPlaying && state.stepIndex >= lane.end) {
-        state.stepIndex = lane.start;
-      }
-      state.isPlaying = !state.isPlaying;
-      render({ focusKey: "play" });
-    });
-
-    const speed = createElement("button", "control-button control-button--quiet", `속도 ${playbackSpeeds[state.speedIndex].label}`);
-    speed.type = "button";
-    speed.dataset.focusKey = "speed";
-    speed.disabled = lane.length <= 1 || motionQuery.matches;
-    speed.addEventListener("click", () => {
-      state.speedIndex = (state.speedIndex + 1) % playbackSpeeds.length;
-      render({ focusKey: "speed" });
-    });
-
-    const next = createElement("button", "control-button", nextLabel);
-    next.type = "button";
-    next.dataset.focusKey = "next-step";
-    next.disabled = state.stepIndex >= steps.length - 1 || steps.length === 0;
-    next.addEventListener("click", () => {
-      state.stepIndex = Math.min(steps.length - 1, state.stepIndex + 1);
-      state.isPlaying = false;
-      render({ focusKey: state.stepIndex >= steps.length - 1 ? "previous" : "next-step" });
-    });
-
-    controls.append(previous, progressWrap, play, speed, next);
-    stage.appendChild(controls);
+    const comparison = renderComparison(workbench);
+    if (comparison) {
+      stage.appendChild(comparison);
+    }
     const selectedStep = currentStep(sequence);
     const statusMessage = selectedStep._laneId
       ? `${scenario.label || "현재 조건"}, ${selectedStep._laneLabel}, ${selectedStep.from}에서 ${selectedStep.to}로 ${selectedStep.verb}: ${selectedStep.payload}`
@@ -900,6 +1010,7 @@
 
   function renderEvidence(main, sequence) {
     const step = currentStep(sequence);
+    const scenario = currentScenario(sequence);
     const section = createElement("section", "evidence-section");
     section.id = "evidence";
     const heading = createElement("header", "section-heading");
@@ -909,6 +1020,18 @@
       createElement("p", "section-lede", "현재 경로에서 무엇을 관찰했고 어느 책임을 확인해야 하는지 연결합니다.")
     );
     section.appendChild(heading);
+
+    if (!isScenarioRevealed(scenario)) {
+      const locked = createElement("div", "evidence-locked");
+      locked.append(
+        createElement("strong", "", "현재 조건의 경로가 아직 잠겨 있습니다"),
+        createElement("p", "", "관찰 영역에서 결과를 먼저 예상하면 이 단계의 개념과 코드 증거가 함께 열립니다."),
+        makeLink("예상 선택으로 이동 ↑", "#lab", "text-link")
+      );
+      section.appendChild(locked);
+      main.appendChild(section);
+      return;
+    }
 
     const layout = createElement("div", "evidence-layout");
     const primary = createElement("article", "step-evidence");
@@ -1109,7 +1232,6 @@
   }
 
   function render(options) {
-    clearPlaybackTimer();
     const focusKey = options && options.focusKey;
     app.replaceChildren();
     const skip = makeLink("본문으로 건너뛰기", "#main-content", "skip-link");
@@ -1141,7 +1263,6 @@
     state.stepIndex = Math.min(state.stepIndex, Math.max(steps.length - 1, 0));
 
     renderSequence(app, sequence);
-    schedulePlayback(sequence);
 
     if (focusKey) {
       window.requestAnimationFrame(() => {
@@ -1154,9 +1275,7 @@
   }
 
   motionQuery.addEventListener("change", () => {
-    state.isPlaying = false;
     render();
   });
-  window.addEventListener("beforeunload", clearPlaybackTimer);
   render();
 })();

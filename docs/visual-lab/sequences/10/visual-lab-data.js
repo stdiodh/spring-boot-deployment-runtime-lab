@@ -9,6 +9,28 @@ window.visualLabData = {
     "kind": "pipeline",
     "title": "Pipeline Gate",
     "instruction": "실패 지점을 선택해 이후 job이 차단되는지와 배포 성공을 판정할 증거를 확인하세요.",
+    "visual": {
+      "src": "../../assets/diagrams/10-pipeline-gates.svg",
+      "alt": "build가 artifact를 만들고 deploy가 서버를 갱신한 뒤 verify가 compose 상태와 로그를 출력하고 HTTP 응답 성공을 확인하는 세 개의 파이프라인 게이트",
+      "caption": "build와 deploy 통과 뒤 verify는 ps·log 출력을 관찰하고 `curl --fail`이 성공할 때 workflow를 완료합니다."
+    },
+    "terms": [
+      { "term": "job", "meaning": "CI/CD workflow 안에서 하나의 책임을 수행하는 실행 단위" },
+      { "term": "artifact", "meaning": "build job이 만들고 다음 job으로 전달하는 검증된 배포 파일" },
+      { "term": "needs", "meaning": "이전 job 성공을 다음 job의 실행 조건으로 연결하는 의존 선언" },
+      { "term": "verify", "meaning": "배포 명령 이후 실제 서비스 상태를 증거로 확인하는 별도 단계" }
+    ],
+    "comparison": {
+      "label": "명령 실행과 서비스 검증",
+      "left": {
+        "title": "deploy command",
+        "body": "release 파일을 배치하고 애플리케이션 container를 갱신하는 작업입니다. 명령 종료는 중간 상태입니다."
+      },
+      "right": {
+        "title": "verified service",
+        "body": "compose 상태와 애플리케이션 로그를 관찰하고 HTTP health check가 성공한 상태입니다. ps와 log 내용을 별도로 판정하는 script는 아닙니다."
+      }
+    },
     "nodes": {
       "git-trigger": {
         "label": "Git trigger",
@@ -99,7 +121,7 @@ window.visualLabData = {
         "label": "scripts/check-deploy.sh",
         "icon": "test",
         "kind": "verification script",
-        "role": "compose 상태, 로그, HTTP 확인",
+        "role": "compose 상태·로그 출력 관찰과 HTTP 성공 확인",
         "boundary": "Verification",
         "codePointIds": [
           "inline-deploy-steps"
@@ -137,17 +159,27 @@ window.visualLabData = {
         "label": "Verification failure",
         "icon": "evidence",
         "kind": "failure evidence",
-        "role": "compose, 로그, HTTP 중 첫 실패",
+        "role": "docker 명령 오류 또는 HTTP health check 실패",
         "boundary": "Verify job"
       }
     },
     "scenarios": [
       {
         "id": "pipeline-verified",
-        "label": "검증까지 완료",
+        "label": "release-bundle·EC2 입력 준비",
         "flowId": "build-deploy-verify",
         "tone": "recovered",
-        "prompt": "검증된 artifact가 배포되고 compose, 로그, HTTP 확인까지 이어집니다.",
+        "prompt": "build job이 release-bundle을 만들었고 EC2 배포 입력이 준비되었습니다. 어디까지 관찰해야 성공을 판단할지 예측합니다.",
+        "prediction": {
+          "prompt": "어느 gate까지 통과해야 배포 성공으로 판단할 수 있을까요?",
+          "options": [
+            { "id": "build", "label": "build job 성공" },
+            { "id": "deploy", "label": "deploy 스크립트 종료" },
+            { "id": "verify", "label": "ps·log 관찰 후 HTTP health check 성공" }
+          ],
+          "answer": "verify",
+          "explanation": "artifact 전달과 서버 갱신은 중간 상태입니다. 실제 서비스 증거를 확인하는 verify가 최종 gate입니다."
+        },
         "route": [
           "Push / workflow_dispatch",
           "build job",
@@ -278,7 +310,7 @@ window.visualLabData = {
                   "from": "http-response",
                   "to": "workflow-result",
                   "verb": "성공 판정",
-                  "payload": "compose + log + HTTP passed",
+                  "payload": "ps·log output observed + HTTP health check passed",
                   "kind": "response"
                 }
               ]
@@ -293,19 +325,29 @@ window.visualLabData = {
           },
           {
             "label": "성공 증거",
-            "value": "compose 상태 · 로그 · HTTP 응답",
+            "value": "ps·log 출력 · HTTP health check",
             "tone": "recovered"
           }
         ],
-        "evidence": "build 산출물이 artifact로 전달되고 verify 단계가 compose 상태, 로그, HTTP 응답을 확인합니다.",
-        "outcome": "배포 명령 종료가 아니라 verify 증거까지 통과해야 성공으로 판정합니다."
+        "evidence": "build 산출물이 artifact로 전달되고 check-deploy.sh가 compose 상태와 로그를 출력한 뒤 `curl --fail`로 HTTP 응답을 확인합니다.",
+        "outcome": "배포 명령 종료가 아니라 runtime 출력을 관찰하고 HTTP health check가 성공해야 workflow를 성공으로 판정합니다."
       },
       {
         "id": "pipeline-build-failed",
-        "label": "build에서 차단",
+        "label": "test·bootJar 실패",
         "flowId": "build-deploy-verify",
         "tone": "blocked",
         "prompt": "테스트 또는 bootJar가 실패했을 때 deploy가 실행되는지 확인합니다.",
+        "prediction": {
+          "prompt": "build가 실패하면 deploy job은 어떻게 될까요?",
+          "options": [
+            { "id": "continue", "label": "실패한 artifact로 계속 진행" },
+            { "id": "skip", "label": "needs 조건 때문에 실행하지 않음" },
+            { "id": "verify", "label": "verify만 먼저 실행" }
+          ],
+          "answer": "skip",
+          "explanation": "검증된 artifact가 없으므로 needs로 연결된 deploy와 verify는 시작되지 않아야 합니다."
+        },
         "route": [
           "Push / workflow_dispatch",
           "build job",
@@ -379,10 +421,20 @@ window.visualLabData = {
       },
       {
         "id": "pipeline-deploy-failed",
-        "label": "deploy에서 차단",
+        "label": "EC2 갱신 명령 오류",
         "flowId": "workflow-step-responsibility",
         "tone": "blocked",
         "prompt": "artifact는 준비됐지만 서버 갱신에 실패한 경우 verify 경계를 확인합니다.",
+        "prediction": {
+          "prompt": "artifact가 존재하지만 서버 갱신이 실패했다면 어디부터 확인할까요?",
+          "options": [
+            { "id": "build", "label": "이미 통과한 build 테스트" },
+            { "id": "deploy", "label": "deploy step과 서버 갱신 로그" },
+            { "id": "verify", "label": "실행되지 않은 HTTP verify" }
+          ],
+          "answer": "deploy",
+          "explanation": "build 성공과 deploy 성공은 별도입니다. 처음 실패한 deploy step과 서버 갱신 책임을 먼저 좁힙니다."
+        },
         "route": [
           "build job",
           "Artifact",
@@ -463,10 +515,20 @@ window.visualLabData = {
       },
       {
         "id": "pipeline-verify-failed",
-        "label": "verify 실패",
+        "label": "deploy 후 HTTP 응답 없음",
         "flowId": "workflow-step-responsibility",
         "tone": "warning",
-        "prompt": "컨테이너 갱신 뒤 상태, 로그 또는 HTTP 확인이 실패한 경우 성공 판정을 보류합니다.",
+        "prompt": "app container 갱신 명령은 끝났지만 `curl --fail` HTTP 확인이 성공하지 않았습니다. 현재 상태를 예측합니다.",
+        "prediction": {
+          "prompt": "deploy는 끝났지만 HTTP 확인이 실패했습니다. 현재 상태는 무엇일까요?",
+          "options": [
+            { "id": "complete", "label": "배포 완료" },
+            { "id": "rollback", "label": "자동 rollback 완료" },
+            { "id": "unverified", "label": "갱신됐지만 정상 여부는 미확인" }
+          ],
+          "answer": "unverified",
+          "explanation": "파일 전달과 container 갱신만으로 서비스 정상 상태를 보장하지 않습니다. verify 실패 증거를 해결해야 합니다."
+        },
         "route": [
           "Artifact",
           "deploy job",
@@ -509,14 +571,14 @@ window.visualLabData = {
                   "from": "verify-job",
                   "to": "verify-script",
                   "verb": "증거 수집",
-                  "payload": "compose ps + logs + HTTP",
+                  "payload": "compose ps output + logs + curl --fail",
                   "kind": "compare"
                 },
                 {
                   "from": "verify-script",
                   "to": "verify-failure",
                   "verb": "성공 판정 중단",
-                  "payload": "one or more checks failed",
+                  "payload": "docker command error or HTTP health check failure",
                   "kind": "failure",
                   "check": "실패한 첫 검증 항목과 runtime log를 연결합니다."
                 }
@@ -542,7 +604,7 @@ window.visualLabData = {
             "tone": "warning"
           }
         ],
-        "evidence": "check-deploy.sh의 compose 상태, 앱 로그, HTTP 응답 중 하나라도 실패하면 workflow는 성공으로 끝나지 않아야 합니다.",
+        "evidence": "check-deploy.sh는 docker 명령 오류 없이 ps·log 출력을 보여주고, `curl --fail`이 성공해야 0으로 종료합니다. 로그 내용의 정상 여부를 자동 판정하지는 않습니다.",
         "outcome": "실행 파일 전달은 끝났지만 서비스 정상 여부가 확인되지 않았으므로 배포 완료로 보지 않습니다.",
         "stopAfter": 5
       }

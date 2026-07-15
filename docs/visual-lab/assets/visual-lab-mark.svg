@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-labelledby="mark-title mark-desc">
+  <title id="mark-title">A&amp;I Backend Visual Lab</title>
+  <desc id="mark-desc">선택한 시스템 신호가 다음 판단으로 이어지는 마름모 형태의 로컬 브랜드 마크</desc>
+  <metadata>Source: A&amp;I Backend Visual Lab; License: project-local educational asset; redistribution follows repository terms.</metadata>
+  <rect width="32" height="32" rx="7" fill="#F8F9FB"/>
+  <path d="M16 4 28 16 16 28 4 16z" fill="#FFFFFF" stroke="#0C2691" stroke-width="2"/>
+  <path d="M10 16h9m0 0-4-4m4 4-4 4" fill="none" stroke="#2955E4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

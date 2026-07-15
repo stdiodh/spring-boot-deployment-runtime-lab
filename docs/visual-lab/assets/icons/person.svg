@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="person-title person-desc">
+  <title id="person-title">Learner</title>
+  <desc id="person-desc">A&amp;I Backend Visual Lab에서 Learner 책임을 나타내는 선형 아이콘</desc>
+  <metadata>Source: A&amp;I Backend Visual Lab; License: project-local educational asset; redistribution follows repository terms.</metadata>
+  <g fill="none" stroke="#0C2691" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M4 22c.8-5 3.4-8 8-8s7.2 3 8 8"/></g>
+</svg>
