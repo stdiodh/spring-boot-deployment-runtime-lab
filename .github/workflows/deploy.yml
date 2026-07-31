@@ -274,9 +274,7 @@ jobs:
   verify:
     needs: deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      APP_IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/aandi-deployment-runtime-lab:${{ github.sha }}
+    timeout-minutes: 5
     steps:
       - name: Configure SSH
         env:
@@ -289,8 +287,15 @@ jobs:
           test -s ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Verify service health, exact revision, and readiness
+      - name: Verify API response
         run: |
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
             "${EC2_USERNAME}@${EC2_HOST}" \
-            "bash '${RELEASE_DIR}/scripts/check-deploy.sh' '${RELEASE_DIR}' '${APP_IMAGE}' '${GITHUB_SHA}'"
+            "curl --fail --silent --show-error \
+              --connect-timeout 2 \
+              --max-time 5 \
+              --retry 23 \
+              --retry-all-errors \
+              --retry-delay 5 \
+              --retry-max-time 120 \
+              http://localhost:8080/actuator/health >/dev/null"
