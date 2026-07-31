@@ -112,11 +112,14 @@ workflow는 `EC2_HOST`를 대상으로 `ssh-keyscan`을 실행해 `known_hosts`�
 
 10을 실행하기 전에 EC2에 다음 상태가 있어야 합니다.
 
-- Docker와 Docker Compose plugin 설치
-- HTTP 검증에 사용할 `curl` 설치
+- Docker 설치
+- Compose plugin 설치와 checksum 검증에 사용할 `curl`, `sha256sum` 설치
 - SSH 사용자가 Docker 명령을 실행할 수 있음
 - application `8080` 접근 허용
 - MySQL `3306`과 Redis `6379`는 외부 인바운드에서 차단
+
+Compose plugin이 아직 없으면 workflow가 공식 release의 고정 버전을 checksum 검증 후
+배포 사용자 계정의 Docker CLI plugin 경로에 설치합니다.
 
 EC2 runtime `.env`, MySQL, Redis는 미리 만들지 않습니다.
 첫 workflow가 `.env`를 전달하고 Compose로 세 서비스를 생성합니다.

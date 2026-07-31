@@ -15,6 +15,7 @@ env:
   EC2_HOST: ${{ secrets.EC2_HOST }}
   EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
   RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab
+  COMPOSE_VERSION: v5.1.4
 
 jobs:
   publish:
@@ -193,7 +194,7 @@ jobs:
             deploy/compose.prod.yaml \
             "${EC2_USERNAME}@${EC2_HOST}:${RELEASE_DIR}/deploy/compose.prod.yaml"
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
-            scripts/deploy.sh scripts/check-deploy.sh \
+            scripts/ensure-compose.sh scripts/deploy.sh scripts/check-deploy.sh \
             "${EC2_USERNAME}@${EC2_HOST}:${RELEASE_DIR}/scripts/"
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
             "${RUNNER_TEMP}/runtime.env" \
@@ -203,13 +204,15 @@ jobs:
         run: |
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
             "${EC2_USERNAME}@${EC2_HOST}" \
-            "bash -s -- '${RELEASE_DIR}' '${APP_IMAGE}'" <<'REMOTE'
+            "bash -s -- '${RELEASE_DIR}' '${APP_IMAGE}' '${COMPOSE_VERSION}'" <<'REMOTE'
           set -euo pipefail
 
           release_dir="$1"
           app_image="$2"
+          compose_version="$3"
 
           cd "$release_dir"
+          bash scripts/ensure-compose.sh "$compose_version"
           test -f .env.next
           chmod 600 .env.next
           grep -Fxq "APP_IMAGE='${app_image}'" .env.next
