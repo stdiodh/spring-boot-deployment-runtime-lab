@@ -29,31 +29,40 @@
 
 ## secret과 runtime 경계
 
-- [ ] GitHub에는 Docker Hub와 EC2 접속 secret만 있습니다.
+- [ ] Docker Hub와 EC2 접속값은 Repository Secret에 있습니다.
+- [ ] DB, JWT, OAuth, Mail 값은 GitHub `production` Environment의 Secret과 Variable에 있습니다.
+- [ ] Secret을 workflow 명령문에 직접 삽입하지 않고 step `env`로 전달합니다.
+- [ ] workflow가 필수값 누락과 dotenv에 안전하지 않은 줄바꿈을 EC2 전송 전에 차단합니다.
 - [ ] workflow가 `ssh-keyscan`으로 `known_hosts`를 준비합니다.
-- [ ] DB, JWT, OAuth, Mail 값은 EC2 runtime `.env`에 있습니다.
 - [ ] EC2 `.env` 권한은 `600`입니다.
-- [ ] workflow가 EC2 `.env`를 매 배포마다 다시 만들지 않습니다.
+- [ ] 검증된 `.env.next`만 기존 `.env`와 원자적으로 교체됩니다.
+- [ ] 기존 `.env`는 rollback을 위해 `.env.previous`로 보존됩니다.
 - [ ] secret 실제 값이 workflow, script, 문서, 로그에 노출되지 않습니다.
 
 ## EC2 배포
 
-- [ ] 09의 Compose와 runtime `.env`가 먼저 준비되어 있습니다.
+- [ ] EC2에는 Docker, Docker Compose plugin, curl이 설치되어 있습니다.
+- [ ] 첫 배포가 사전 `.env` 없이 MySQL, Redis, app을 모두 생성합니다.
 - [ ] `scripts/deploy.sh`가 정확한 SHA image를 pull합니다.
 - [ ] MySQL과 Redis는 `--no-recreate`로 보존되고, 없거나 멈춘 경우 기동됩니다.
 - [ ] app은 `--no-deps`로 갱신됩니다.
 - [ ] 기존 MySQL과 Redis container를 내리거나 다시 만들지 않습니다.
-- [ ] MySQL volume과 기존 데이터가 유지됩니다.
+- [ ] MySQL은 root가 아닌 전용 애플리케이션 사용자를 제공합니다.
+- [ ] MySQL named volume과 기존 데이터가 재배포 전후 유지됩니다.
+- [ ] MySQL `3306`과 Redis `6379`는 host port로 공개되지 않습니다.
+- [ ] `docker compose down -v`를 사용하지 않습니다.
 - [ ] 같은 SHA를 다시 배포해도 script가 실패하지 않습니다.
 - [ ] deployment concurrency가 동시 운영 배포를 직렬화합니다.
 
 ## 배포 검증
 
+- [ ] MySQL과 Redis가 healthy 상태인지 확인합니다.
 - [ ] app container가 running 상태인지 확인합니다.
 - [ ] 실제 image reference와 image ID가 예상 SHA image와 같습니다.
 - [ ] OCI revision label이 예상 commit SHA와 같습니다.
-- [ ] HTTP 성공 응답을 제한된 횟수로 재시도합니다.
+- [ ] DB와 Redis 상태를 포함한 readiness 응답을 제한된 횟수로 재시도합니다.
 - [ ] 실패 시 Compose 상태와 최근 app log를 확인할 수 있습니다.
+- [ ] 실패 시 이전 `.env`와 image로 rollback하고 rollback HTTP 상태를 다시 확인합니다.
 - [ ] verify 실패가 workflow 전체 실패로 이어집니다.
 
 ## trigger 정책
@@ -74,9 +83,10 @@
 <details>
 <summary>멘토용 리뷰 기준</summary>
 
-- 통과 기준: 학생이 `test -> SHA image -> registry -> EC2 pull -> app-only update -> verify`를 설명합니다.
+- 통과 기준: 학생이 `test -> SHA image -> runtime env -> Compose deploy -> readiness -> rollback`을 설명합니다.
 - 보완 기준: `latest`를 실제 배포 버전으로 사용하거나, EC2에서 image를 다시 build합니다.
 - 질문 예시: “workflow가 성공했지만 실행 revision이 다른 경우 이 배포는 성공인가요?”
-- 질문 예시: “DB secret을 GitHub Actions가 매번 `.env`로 쓰지 않는 이유는 무엇인가요?”
+- 질문 예시: “왜 MySQL과 Redis의 host port를 공개하지 않아도 app이 연결될 수 있나요?”
+- 질문 예시: “MySQL volume이 이미 있으면 GitHub Secret 변경만으로 비밀번호가 바뀌지 않는 이유는 무엇인가요?”
 
 </details>

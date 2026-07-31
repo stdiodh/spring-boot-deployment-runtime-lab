@@ -1,13 +1,15 @@
+name: aandi-production
+
 services:
   app:
-    image: "${APP_IMAGE:?}"
+    image: "${APP_IMAGE:?APP_IMAGE is required}"
     container_name: aandi-app
     restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
@@ -35,13 +37,13 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       TZ: Asia/Seoul
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-    ports:
-      - "3306:3306"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$$MYSQL_ROOT_PASSWORD"]
       interval: 10s
@@ -54,8 +56,12 @@ services:
     image: redis:7.4
     container_name: aandi-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   mysql-data:
+    name: aandi-mysql-data

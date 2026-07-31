@@ -46,3 +46,16 @@ jwt:
 app:
   frontend-url: ${APP_FRONTEND_URL}
   password-reset-url: ${APP_PASSWORD_RESET_URL}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: db,redis

@@ -10,7 +10,8 @@
 - CI 실패가 이미지 게시와 배포를 차단하는 구조
 - 이미지를 한 번 빌드해 Docker Hub를 거쳐 EC2까지 전달하는 구조
 - commit SHA 이미지, 실행 revision, HTTP 응답으로 배포를 판정하는 방법
-- 앱만 갱신하면서 MySQL, Redis와 volume을 유지하는 방법
+- GitHub의 운영 secret으로 EC2 runtime `.env`를 안전하게 만드는 방법
+- Docker Compose로 MySQL과 Redis를 준비하고 앱만 갱신하면서 volume을 유지하는 방법
 
 ## 브랜치와 시퀀스 경계
 
@@ -36,9 +37,11 @@ source
   -> build/libs/app.jar
   -> Docker image build
   -> Docker Hub SHA tag + latest alias
+  -> GitHub production secret으로 runtime .env 생성
+  -> EC2에 .env.next 전송 후 원자적 교체
   -> EC2 exact SHA pull
-  -> app container only update
-  -> image reference + image ID + revision + HTTP verify
+  -> Compose로 MySQL + Redis + app 기동
+  -> service health + image + revision + readiness verify
 ```
 
 배포에는 `${GITHUB_SHA}` 태그를 사용합니다.
@@ -79,11 +82,23 @@ GitHub에는 이미지 게시와 SSH 접속에 필요한 값만 등록합니다.
 | `EC2_USERNAME` | EC2 SSH 사용자 |
 | `EC2_SSH_KEY` | EC2 SSH 개인 키 |
 
-DB 비밀번호, JWT, OAuth, Mail 같은 애플리케이션 runtime 값은 GitHub Actions가 만들지 않습니다.
+`production` Environment에는 runtime 값을 나눠 등록합니다.
+
+| 구분 | 이름 |
+| --- | --- |
+| Secret | `PROD_DB_PASSWORD`, `PROD_MYSQL_ROOT_PASSWORD`, `PROD_JWT_SECRET` |
+| Secret | `PROD_MAIL_USERNAME`, `PROD_MAIL_PASSWORD`, `PROD_GOOGLE_CLIENT_SECRET` |
+| Variable | `PROD_DB_USERNAME`, `PROD_MYSQL_DATABASE`, `PROD_GOOGLE_CLIENT_ID` |
+| Optional Variable | `PROD_FRONTEND_URL`, `PROD_PASSWORD_RESET_URL`, `PROD_WEBSOCKET_ALLOWED_ORIGIN_PATTERNS` |
+
+앱의 `DB_PASSWORD`와 MySQL의 `MYSQL_PASSWORD`는 같은 `PROD_DB_PASSWORD`에서 만들고 root 비밀번호는 분리합니다.
+URL Variable을 생략하면 workflow가 `EC2_HOST`와 `8080` 포트를 기준으로 기본 URL을 만듭니다.
+DB 비밀번호, JWT, OAuth, Mail 같은 애플리케이션 runtime 값은 GitHub의 `production` Environment에서 관리합니다.
 SSH host key는 workflow 실행 중 `ssh-keyscan`으로 `known_hosts`에 기록합니다.
-09에서 준비한 EC2의 `~/aandi-deployment-runtime-lab/.env`에 보관하고 권한을 `600`으로 제한합니다.
-MySQL과 Redis도 09에서 한 번 준비하며, 10의 `deploy.sh`는 두 서비스를 내리거나 다시 만들지 않습니다.
-기존 container는 `--no-recreate`로 보존하고, 서비스가 없거나 멈춘 경우에만 기동한 뒤 app만 교체합니다.
+Actions는 값을 로그에 출력하지 않고 권한 `600`의 runtime 파일을 만든 뒤 EC2의 `.env.next`로 전송합니다.
+EC2에서 Compose 설정을 검증한 뒤 기존 `.env`를 백업하고 `.env.next`를 `.env`로 원자적으로 교체합니다.
+첫 배포에는 MySQL, Redis, app을 모두 만들고 이후 배포에는 MySQL volume을 유지하면서 app만 새 SHA image로 교체합니다.
+MySQL과 Redis의 host port는 공개하지 않고 Compose 내부 network에서만 사용합니다.
 
 ## workflow 실행 정책
 
@@ -107,12 +122,14 @@ on:
 
 `scripts/check-deploy.sh`는 다음을 모두 확인합니다.
 
+- MySQL과 Redis가 healthy 상태인지
 - `aandi-app` 컨테이너가 running 상태인지
 - 컨테이너가 요청한 SHA 이미지 reference와 image ID를 사용하는지
 - OCI `org.opencontainers.image.revision` label이 배포 SHA와 같은지
-- 제한 시간 안에 `http://localhost:8080/`가 성공 응답을 반환하는지
+- 제한 시간 안에 readiness 응답이 성공하는지
 
 하나라도 다르면 verify job이 실패합니다.
+이전 배포 정보가 있으면 `.env.previous`와 이전 image로 rollback한 뒤 rollback 상태도 다시 확인합니다.
 Docker Hub와 EC2가 필요한 구간은 로컬 명령만으로 완전히 검증할 수 없습니다.
 
 ## 시작과 비교

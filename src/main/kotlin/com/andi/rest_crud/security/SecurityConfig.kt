@@ -29,6 +29,7 @@ class SecurityConfig(
                         "/index.html",
                         "/auth-demo.html",
                         "/realtime-demo.html",
+                        "/actuator/health/**",
                         "/ws-chat",
                         "/ws-chat/**",
                         "/swagger/**",
