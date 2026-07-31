@@ -43,6 +43,7 @@
 
 - [ ] EC2에는 Docker, curl, sha256sum이 설치되어 있습니다.
 - [ ] Compose plugin이 없으면 workflow가 checksum 검증 후 배포 사용자 영역에 설치합니다.
+- [ ] 전용 배포 사용자가 Docker daemon에 접근하며, 필요하면 passwordless sudo로 `docker` 그룹에 추가됩니다.
 - [ ] 첫 배포가 사전 `.env` 없이 MySQL, Redis, app을 모두 생성합니다.
 - [ ] `scripts/deploy.sh`가 정확한 SHA image를 pull합니다.
 - [ ] MySQL과 Redis는 `--no-recreate`로 보존되고, 없거나 멈춘 경우 기동됩니다.

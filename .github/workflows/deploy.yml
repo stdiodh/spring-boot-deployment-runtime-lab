@@ -185,7 +185,7 @@ jobs:
           test -s ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Upload Compose, runtime environment, and deployment scripts
+      - name: Upload Compose and deployment scripts
         run: |
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
             "${EC2_USERNAME}@${EC2_HOST}" \
@@ -196,23 +196,63 @@ jobs:
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
             scripts/ensure-compose.sh scripts/deploy.sh scripts/check-deploy.sh \
             "${EC2_USERNAME}@${EC2_HOST}:${RELEASE_DIR}/scripts/"
+
+      - name: Prepare Docker access and Compose plugin
+        run: |
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
+            "${EC2_USERNAME}@${EC2_HOST}" \
+            "bash -s -- '${RELEASE_DIR}' '${COMPOSE_VERSION}'" <<'REMOTE'
+          set -euo pipefail
+
+          release_dir="$1"
+          compose_version="$2"
+          deployment_user="$(id -un)"
+
+          cd "$release_dir"
+          bash scripts/ensure-compose.sh "$compose_version"
+
+          if docker info >/dev/null 2>&1; then
+            exit 0
+          fi
+
+          if ! sudo -n docker info >/dev/null 2>&1; then
+            echo \
+              "Docker daemon is unavailable or the deployment user has no passwordless sudo." \
+              >&2
+            exit 1
+          fi
+
+          sudo -n usermod -aG docker "$deployment_user"
+          id -nG "$deployment_user" |
+            tr ' ' '\n' |
+            grep -Fxq docker
+          echo "Docker group access configured for the next SSH session."
+          REMOTE
+
+      - name: Upload runtime environment
+        run: |
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
+            "${EC2_USERNAME}@${EC2_HOST}" \
+            "install -m 600 /dev/null '${RELEASE_DIR}/.env.next'"
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
             "${RUNNER_TEMP}/runtime.env" \
             "${EC2_USERNAME}@${EC2_HOST}:${RELEASE_DIR}/.env.next"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
+            "${EC2_USERNAME}@${EC2_HOST}" \
+            "test \"\$(stat -c '%a' '${RELEASE_DIR}/.env.next')\" = '600'"
 
       - name: Install runtime environment and deploy exact image
         run: |
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
             "${EC2_USERNAME}@${EC2_HOST}" \
-            "bash -s -- '${RELEASE_DIR}' '${APP_IMAGE}' '${COMPOSE_VERSION}'" <<'REMOTE'
+            "bash -s -- '${RELEASE_DIR}' '${APP_IMAGE}'" <<'REMOTE'
           set -euo pipefail
 
           release_dir="$1"
           app_image="$2"
-          compose_version="$3"
 
           cd "$release_dir"
-          bash scripts/ensure-compose.sh "$compose_version"
+          docker info >/dev/null
           test -f .env.next
           chmod 600 .env.next
           grep -Fxq "APP_IMAGE='${app_image}'" .env.next

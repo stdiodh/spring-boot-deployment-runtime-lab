@@ -97,6 +97,7 @@ DB 비밀번호, JWT, OAuth, Mail 같은 애플리케이션 runtime 값은 GitHu
 SSH host key는 workflow 실행 중 `ssh-keyscan`으로 `known_hosts`에 기록합니다.
 Actions는 값을 로그에 출력하지 않고 권한 `600`의 runtime 파일을 만든 뒤 EC2의 `.env.next`로 전송합니다.
 EC2에 Docker Compose plugin이 없으면 workflow가 공식 release checksum을 확인하고 배포 사용자 영역에 고정 버전을 설치합니다.
+배포 사용자가 Docker daemon에 접근하지 못하면 passwordless sudo를 확인한 뒤 `docker` 그룹에 추가하고 새 SSH session에서 접근을 다시 검증합니다.
 EC2에서 Compose 설정을 검증한 뒤 기존 `.env`를 백업하고 `.env.next`를 `.env`로 원자적으로 교체합니다.
 첫 배포에는 MySQL, Redis, app을 모두 만들고 이후 배포에는 MySQL volume을 유지하면서 app만 새 SHA image로 교체합니다.
 MySQL과 Redis의 host port는 공개하지 않고 Compose 내부 network에서만 사용합니다.

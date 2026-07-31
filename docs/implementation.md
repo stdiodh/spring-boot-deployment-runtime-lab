@@ -114,12 +114,15 @@ workflow는 `EC2_HOST`를 대상으로 `ssh-keyscan`을 실행해 `known_hosts`�
 
 - Docker 설치
 - Compose plugin 설치와 checksum 검증에 사용할 `curl`, `sha256sum` 설치
-- SSH 사용자가 Docker 명령을 실행할 수 있음
+- SSH 사용자가 Docker 명령을 실행할 수 있거나 passwordless sudo를 사용할 수 있음
 - application `8080` 접근 허용
 - MySQL `3306`과 Redis `6379`는 외부 인바운드에서 차단
 
 Compose plugin이 아직 없으면 workflow가 공식 release의 고정 버전을 checksum 검증 후
 배포 사용자 계정의 Docker CLI plugin 경로에 설치합니다.
+Docker daemon 권한이 없으면 workflow가 passwordless sudo로 사용자를 `docker` 그룹에 추가하고
+다음 SSH session에서 권한 적용 여부를 확인합니다.
+`docker` 그룹은 root 수준의 Docker 제어 권한을 가지므로 전용 배포 사용자에게만 허용합니다.
 
 EC2 runtime `.env`, MySQL, Redis는 미리 만들지 않습니다.
 첫 workflow가 `.env`를 전달하고 Compose로 세 서비스를 생성합니다.
