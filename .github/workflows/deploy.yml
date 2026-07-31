@@ -2,16 +2,25 @@ name: Deploy to EC2
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - 09-answer
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPOSITORY: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/aandi-deployment-runtime-lab
+  EC2_HOST: ${{ secrets.EC2_HOST }}
+  EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+  RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab
 
 jobs:
-  deploy:
+  publish:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    env:
-      RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab
-      APP_IMAGE: aandi-deployment-runtime-lab:latest
+    timeout-minutes: 30
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -25,58 +34,90 @@ jobs:
       - name: Grant Gradle permission
         run: chmod +x gradlew
 
-      - name: Run tests and build jar
-        run: ./gradlew test bootJar
+      - name: Run tests and build executable jar
+        run: ./gradlew clean test bootJar
 
-      - name: Prepare release bundle
-        run: |
-          rm -rf release
-          mkdir -p release/build/libs
-          cp build/libs/*.jar release/build/libs/app.jar
-          cp Dockerfile release/Dockerfile
-          cp .env.example release/.env.example
-          cp -R deploy release/deploy
+      - name: Check deployment artifact
+        run: test -f build/libs/app.jar
 
-      - name: Write SSH key
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Build and publish image
         run: |
-          mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/aandi-ec2.pem
+          docker build \
+            --build-arg APP_VERSION="$GITHUB_SHA" \
+            --tag "${IMAGE_REPOSITORY}:${GITHUB_SHA}" \
+            --tag "${IMAGE_REPOSITORY}:latest" \
+            .
+          docker push "${IMAGE_REPOSITORY}:${GITHUB_SHA}"
+          docker push "${IMAGE_REPOSITORY}:latest"
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/aandi-deployment-runtime-lab:${{ github.sha }}
+    steps:
+      - name: Checkout deployment files
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/aandi-ec2.pem
           chmod 600 ~/.ssh/aandi-ec2.pem
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -H "$EC2_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
-      - name: Upload release bundle
+      - name: Upload Compose and deployment scripts
         run: |
-          ssh -i ~/.ssh/aandi-ec2.pem "${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}" "mkdir -p ${RELEASE_DIR}"
-          scp -i ~/.ssh/aandi-ec2.pem -r release/* "${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:${RELEASE_DIR}/"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
+            "${EC2_USERNAME}@${EC2_HOST}" \
+            "mkdir -p '${RELEASE_DIR}/deploy' '${RELEASE_DIR}/scripts'"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
+            deploy/compose.prod.yaml \
+            "${EC2_USERNAME}@${EC2_HOST}:${RELEASE_DIR}/deploy/compose.prod.yaml"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
+            scripts/deploy.sh scripts/check-deploy.sh \
+            "${EC2_USERNAME}@${EC2_HOST}:${RELEASE_DIR}/scripts/"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
+            .env.example \
+            "${EC2_USERNAME}@${EC2_HOST}:${RELEASE_DIR}/.env.example"
 
-      - name: Deploy on EC2
+      - name: Pull exact image and update app only
         run: |
-          ssh -i ~/.ssh/aandi-ec2.pem "${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}" <<EOF
-            set -e
-            cd ${RELEASE_DIR}
-            cat > .env <<ENV
-            SPRING_PROFILES_ACTIVE=prod
-            DB_URL=${{ secrets.PROD_DB_URL }}
-            DB_USERNAME=${{ secrets.PROD_DB_USERNAME }}
-            DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}
-            REDIS_HOST=${{ secrets.PROD_REDIS_HOST }}
-            REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
-            JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
-            JWT_EXPIRATION_MS=${{ secrets.PROD_JWT_EXPIRATION_MS }}
-            MAIL_HOST=${{ secrets.PROD_MAIL_HOST }}
-            MAIL_PORT=${{ secrets.PROD_MAIL_PORT }}
-            MAIL_USERNAME=${{ secrets.PROD_MAIL_USERNAME }}
-            MAIL_PASSWORD=${{ secrets.PROD_MAIL_PASSWORD }}
-            GOOGLE_CLIENT_ID=${{ secrets.PROD_GOOGLE_CLIENT_ID }}
-            GOOGLE_CLIENT_SECRET=${{ secrets.PROD_GOOGLE_CLIENT_SECRET }}
-            APP_FRONTEND_URL=${{ secrets.PROD_FRONTEND_URL }}
-            APP_PASSWORD_RESET_URL=${{ secrets.PROD_PASSWORD_RESET_URL }}
-            APP_WEBSOCKET_ALLOWED_ORIGIN_PATTERNS=${{ secrets.PROD_WEBSOCKET_ALLOWED_ORIGIN_PATTERNS }}
-            MYSQL_DATABASE=${{ secrets.PROD_MYSQL_DATABASE }}
-            MYSQL_ROOT_PASSWORD=${{ secrets.PROD_MYSQL_ROOT_PASSWORD }}
-            ENV
-            docker build -t ${APP_IMAGE} .
-            docker compose --env-file .env -f deploy/compose.prod.yaml up -d
-            docker compose --env-file .env -f deploy/compose.prod.yaml ps
-            docker logs --tail 50 aandi-app
-          EOF
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
+            "${EC2_USERNAME}@${EC2_HOST}" \
+            "bash '${RELEASE_DIR}/scripts/deploy.sh' '${RELEASE_DIR}' '${APP_IMAGE}'"
+
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      APP_IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/aandi-deployment-runtime-lab:${{ github.sha }}
+    steps:
+      - name: Configure SSH
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/aandi-ec2.pem
+          chmod 600 ~/.ssh/aandi-ec2.pem
+          ssh-keyscan -T 10 -H "$EC2_HOST" > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Verify exact image, revision, and HTTP response
+        run: |
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -i ~/.ssh/aandi-ec2.pem \
+            "${EC2_USERNAME}@${EC2_HOST}" \
+            "bash '${RELEASE_DIR}/scripts/check-deploy.sh' '${RELEASE_DIR}' '${APP_IMAGE}' '${GITHUB_SHA}'"

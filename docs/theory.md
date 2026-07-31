@@ -1,158 +1,216 @@
-# Docker/Runtime과 CI/CD 이론 정리
+# Docker Runtime과 CI/CD 이론 정리
 
-로컬에서 `bootRun`이 성공해도 운영 서버의 실행이 보장되지는 않습니다.
-배포는 source를 복사하는 일이 아니라 검증된 artifact, 실행 환경, runtime 증거를 이어 붙이는 일입니다.
+로컬에서 실행되는 source는 그대로 배포 단위가 되지 않습니다.
+이번 랩은 검증된 source를 실행 가능한 JAR로 만들고, 같은 JAR를 담은 이미지를 Docker Hub를 통해 EC2까지 전달한 뒤 실제 실행 결과를 확인합니다.
 
 <a id="seq-09"></a>
 
-## 09. source가 실행 중인 process가 되기까지
-
-실습 시작 상태의 `Dockerfile`, `application-prod.yaml`, 운영 Compose에는 COPY·ENTRYPOINT와 환경 변수 연결을 채우는 TODO가 남아 있습니다. 아래 예시는 이 TODO가 도달해야 할 가이드 형태입니다. 다만 현재 `.dockerignore`가 `build` 전체를 제외하므로 `bootJar`가 만든 `build/libs/*.jar`도 Docker build context에 들어가지 않습니다. Dockerfile만 완성해도 image가 만들어진다고 해석하면 안 됩니다.
-
-### 실행 단위는 단계마다 달라집니다
-
-1. source에서 테스트를 실행합니다.
-2. 테스트를 통과한 source를 `bootJar`로 executable jar로 바꿉니다.
-3. Dockerfile은 jar를 image 안의 `app.jar`로 복사하고 실행 명령을 고정합니다.
-4. Compose가 image에서 container instance를 만듭니다.
-5. container의 `ENTRYPOINT`가 Spring process를 시작합니다.
-6. `docker compose ps`, application log, HTTP 응답으로 실제 실행 상태를 확인합니다.
+## 09. 재현 가능한 실행 단위를 만듭니다
 
 ```mermaid
 sequenceDiagram
-    participant S as Source
-    participant G as Gradle
-    participant J as executable jar
-    participant D as Docker builder
-    participant I as image
-    participant C as container
-    participant P as Spring process
-    S->>G: test + bootJar
-    G-->>J: build/libs/*.jar
-    J->>D: Dockerfile COPY 입력
-    D-->>I: tagged image
-    I->>C: prod Compose + .env로 app 실행
-    C->>P: java -jar /app/app.jar
-    P-->>S: ps + log + health 증거
+    autonumber
+    participant Source as Source
+    participant Gradle as Gradle
+    participant Jar as app.jar
+    participant Docker as Docker builder
+    participant Runtime as app container
+
+    Source->>Gradle: clean test bootJar
+    Gradle-->>Jar: build/libs/app.jar
+    Jar->>Docker: exact COPY + APP_VERSION
+    Docker-->>Runtime: tagged image + revision label
+    Runtime-->>Source: process and HTTP evidence
 ```
 
 | 단계 | 들어온 것 | 한 일 | 나간 것 또는 상태 |
-|---|---|---|---|
-| 1 | source와 test | 동작을 검증 | 통과한 build 입력 |
-| 2 | 통과한 source | `bootJar` 실행 | `build/libs/*.jar` |
-| 3 | jar와 Dockerfile | jar를 image filesystem에 복사 | image layer |
-| 4 | image build context | `ENTRYPOINT`를 포함한 image 생성 | tagged image |
-| 5 | image와 runtime config | container instance 생성 | container created |
-| 6 | container | `java -jar` 실행 | Spring process 시작 시도 |
-| 7 | process 상태 | ps·log·HTTP 증거 확인 | healthy 또는 첫 실패 경계 |
+| --- | --- | --- | --- |
+| 1 | source와 test | `clean test bootJar` 실행 | 검증된 `app.jar` |
+| 2 | `app.jar`와 Dockerfile | exact COPY와 revision label 기록 | tagged image |
+| 3 | image와 runtime `.env` | Compose로 app process 시작 | running 또는 기동 실패 |
+| 4 | 실행 중인 app | container와 HTTP 상태 확인 | runtime 성공 또는 첫 실패 경계 |
 
-jar와 image는 실행 전 artifact이고, container와 process는 실행 중 상태입니다.
+### JAR 이름은 하나로 고정합니다
 
-### Dockerfile은 jar를 실행 단위로 바꿉니다
+Spring Boot 프로젝트는 executable JAR와 plain JAR가 함께 생길 수 있습니다.
+Dockerfile이 wildcard로 두 파일 중 하나를 우연히 고르면 build 결과를 재현하기 어렵습니다.
 
-source 전체가 아니라 `bootJar` 결과를 image에 넣습니다.
+이 레포는 다음 계약을 사용합니다.
+
+- `bootJar` 결과는 `build/libs/app.jar`입니다.
+- plain `jar` task는 비활성화합니다.
+- Dockerfile은 `build/libs/app.jar`만 복사합니다.
+- `.dockerignore`는 다른 build 결과를 제외하되 `app.jar`는 context에 포함합니다.
+
+```text
+source -> test -> build/libs/app.jar -> Dockerfile COPY -> image
+```
+
+JAR 파일명이 바뀌거나 파일이 없으면 Docker build가 바로 실패하므로 잘못된 산출물이 다음 단계로 넘어가지 않습니다.
+
+### image에는 source revision을 남깁니다
+
+Docker tag만으로는 컨테이너 안의 코드가 어느 commit에서 만들어졌는지 증명하기 어렵습니다.
+그래서 image build 시 `APP_VERSION`을 전달하고 OCI label에 기록합니다.
 
 ```dockerfile
-FROM eclipse-temurin:21-jre
-WORKDIR /app
-ARG JAR_FILE=build/libs/*.jar
-COPY ${JAR_FILE} app.jar
-EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ARG APP_VERSION=local
+LABEL org.opencontainers.image.revision="${APP_VERSION}"
+COPY build/libs/app.jar /app/app.jar
 ```
 
-실행 전에는 jar가 filesystem artifact로만 존재하고, image 생성 뒤에는 같은 jar와 Java 실행 명령이 하나의 배포 입력으로 묶입니다.
+로컬에서는 `local`, GitHub Actions에서는 `${GITHUB_SHA}`가 revision이 됩니다.
+배포 검증은 tag뿐 아니라 이 label도 확인합니다.
 
-### 첫 실패 경계에서 멈춥니다
+### image와 runtime config의 책임은 다릅니다
 
-- 테스트가 실패하면 jar, image, container 단계로 범위를 넓히지 않습니다.
-- 실제 jar 위치와 `COPY` source가 다르면 image가 만들어지지 않습니다.
-- 필수 환경변수가 빠지면 container 명령이 끝나도 Spring process가 시작하지 못할 수 있습니다.
-- container가 created 또는 running으로 보여도 application log와 HTTP health가 없으면 서비스 성공으로 판정하지 않습니다.
+image에는 실행 코드와 Java runtime을 넣습니다.
+DB 비밀번호, JWT secret, OAuth client secret 같은 환경별 값은 image에 넣지 않고 Compose와 `.env`로 주입합니다.
 
-```bash
-./gradlew test bootJar
-sed -n '1,120p' .dockerignore
-docker build -t aandi-deployment-runtime-lab:latest .
-cp .env.example .env
-docker compose --env-file .env -f deploy/compose.prod.yaml up -d
-docker compose --env-file .env -f deploy/compose.prod.yaml ps
-docker logs --tail 50 aandi-app
-```
+| 구분 | 저장할 것 | 저장하지 않을 것 |
+| --- | --- | --- |
+| Docker image | `app.jar`, Java runtime, ENTRYPOINT, revision label | 운영 비밀번호와 token |
+| Compose | service 관계, port, environment 변수 이름 | 실제 secret 값 |
+| EC2 `.env` | 운영 DB, Redis, JWT, OAuth, Mail 값 | source와 JAR |
 
-두 번째 명령의 출력에서 `build` 규칙을 직접 확인할 수 있습니다. 이 규칙은 `build/libs/*.jar`까지 build context에서 제외하므로 세 번째 Docker build가 `COPY source not found` 경계에서 실패합니다. `.dockerignore`에서 jar 경로를 다시 포함하거나 build 제외 정책을 조정한 뒤에만 뒤의 실행 검증으로 넘어갈 수 있습니다. `.env`의 placeholder도 실제 로컬 검증 값으로 채워야 합니다. 기본 `compose.yaml`은 MySQL과 Redis만 올리므로 app container 검증에는 같은 `:latest` tag를 참조하는 운영 Compose 파일을 명시해야 합니다.
+운영 `.env`는 EC2에 유지하고 `chmod 600`으로 접근을 제한합니다.
 
-[Visual Lab에서 입력 조건을 보고 경로 예측하기](./visual-lab/sequences/09/)
+[Visual Lab에서 runtime 경계를 확인하기](./visual-lab/sequences/09/)
 
 <a id="seq-10"></a>
 
-## 10. build, deploy, verify를 서로 다른 gate로 봅니다
+## 10. image를 한 번 만들고 같은 결과를 배포합니다
 
-현재 가이드 workflow는 test, bundle, upload, EC2 실행과 로그 확인을 하나의 `deploy` job에서 순서대로 수행합니다. 이번 실습 시작 상태는 이를 `build`, `deploy`, `verify` job과 두 script로 나눌 뼈대를 제공하지만 각 본문은 TODO입니다. 아래 diagram과 표는 그 TODO가 지향하는 gate 모델이며, 아직 실행 증거가 나온 완성 pipeline을 묘사하지 않습니다.
-
-또한 현재 가이드와 완성 예시의 원격 `.env` 작성 구간은 중첩 heredoc 종료자 `ENV` 앞에 공백이 남습니다. POSIX shell은 들여쓰기된 종료자를 닫는 표식으로 읽지 않으므로 뒤의 `deploy.sh` 호출까지 `.env` 내용으로 삼킬 수 있습니다. 종료자를 들여쓰기 없이 전달하거나 `printf` 방식으로 바꾸기 전에는 deploy·verify가 재현됐다고 판정하지 않습니다.
-
-### 자동화는 성공 판정 기준을 고정합니다
-
-수동 배포에서는 사람이 artifact 전달, 서버 갱신, 상태 확인 순서를 기억해야 합니다.
-Pipeline은 `build -> deploy -> verify`의 `needs` 관계로 이전 gate를 통과한 경우에만 다음 job을 엽니다.
+EC2에서 JAR를 받아 image를 다시 만들면 Actions가 검증한 결과와 서버가 실행한 결과 사이에 새 build가 생깁니다.
+이번 랩은 Actions가 image를 한 번만 만들고, Docker Hub가 그 image를 전달하도록 책임을 바꿉니다.
 
 ```mermaid
 sequenceDiagram
-    participant G as Git trigger
-    participant A as GitHub Actions
-    participant B as build job
-    participant R as release-bundle
-    participant D as deploy job
-    participant V as verify job
-    participant O as workflow result
-    G->>A: push 또는 workflow_dispatch
-    A->>B: test + bootJar
-    B-->>R: artifact upload
-    R->>D: needs build + artifact
-    D-->>V: needs deploy
-    V->>O: ps + log + curl --fail
+    autonumber
+    participant Git as Git revision
+    participant CI as GitHub Actions
+    participant Hub as Docker Hub
+    participant EC2 as EC2
+    participant App as app container
+
+    Git->>CI: workflow_dispatch on main
+    CI->>CI: test + bootJar
+    CI->>CI: image build with revision label
+    CI->>Hub: push :commit-SHA and :latest
+    Hub->>EC2: pull exact :commit-SHA
+    EC2->>EC2: keep/start MySQL and Redis --no-recreate
+    EC2->>App: up -d --no-deps app
+    App-->>CI: image + revision + HTTP evidence
 ```
 
 | 단계 | 들어온 것 | 한 일 | 나간 것 또는 상태 |
-|---|---|---|---|
-| 1 | Git trigger | workflow 시작 조건 확인 | build job 실행 |
-| 2 | source | test와 `bootJar` 실행 | 검증된 jar 또는 build failure |
-| 3 | jar와 배포 파일 | release bundle 업로드 | deploy 입력 artifact |
-| 4 | build 통과 artifact | EC2 전송과 deploy script 실행 | app container 갱신 또는 deploy failure |
-| 5 | deploy 통과 상태 | verify script 실행 | ps·log·HTTP 증거 |
-| 6 | `curl --fail` 결과 | 성공 조건 판정 | workflow success 또는 verify failure |
+| --- | --- | --- | --- |
+| 1 | source와 commit SHA | test, `bootJar`, image build | 검증된 SHA image |
+| 2 | SHA image | Docker Hub에 SHA와 `latest` push | registry 배포 입력 |
+| 3 | SHA tag와 EC2 runtime | exact pull, 의존 서비스 보존, app-only 갱신 | 새 app container |
+| 4 | 실행 중인 app | image, revision, HTTP 검증 | workflow 성공 또는 verify 실패 |
 
-배포 명령이 끝난 상태와 사용 가능한 서비스가 확인된 상태는 다릅니다.
+### SHA tag가 배포 버전입니다
 
-### job 의존성은 실패 확산을 막습니다
+`${GITHUB_SHA}`는 workflow가 실행된 source revision을 가리킵니다.
+Actions는 같은 image에 두 tag를 게시합니다.
 
-```yaml
-verify:
-  runs-on: ubuntu-latest
-  needs: deploy
-  env:
-    RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab
-  steps:
-    - name: Verify deployment on EC2
-      run: |
-        # TODO 8. EC2에서 check-deploy.sh를 실행하세요.
+| tag | 용도 |
+| --- | --- |
+| `${GITHUB_SHA}` | 실제 배포와 검증에 사용하는 불변 식별자 |
+| `latest` | 사람이 최근 게시 이미지를 찾는 보조 별칭 |
+
+`latest`는 새 게시 때 다른 image를 가리킬 수 있으므로 EC2 배포 입력으로 사용하지 않습니다.
+배포 script는 SHA tag를 정확히 pull하고, verify script는 컨테이너의 image reference, image ID, revision label을 함께 확인합니다.
+
+### gate는 실패 이후 단계를 닫습니다
+
+```text
+test + bootJar
+  -> image publish
+  -> EC2 deploy
+  -> runtime verify
 ```
 
-위 코드는 실습 시작 파일의 실제 verify 뼈대입니다. 완성 조건은 TODO를 채워 build 실패가 deploy를 막고 deploy 실패가 verify를 막게 하는 것입니다. 시작 상태의 job 이름과 `needs`만으로 artifact 전달이나 서버 검증까지 성공했다고 판단하지 않습니다.
+- test 또는 `bootJar`가 실패하면 image를 게시하지 않습니다.
+- image 게시가 실패하면 SSH 배포를 시작하지 않습니다.
+- deploy가 실패하면 verify를 시작하지 않습니다.
+- image나 HTTP 검증이 실패하면 workflow 전체를 성공으로 판정하지 않습니다.
 
-### 실패 원인은 최초 gate에서 읽습니다
+`needs`는 job 순서를 고정하고, deployment concurrency는 두 운영 배포가 동시에 EC2를 바꾸지 못하게 합니다.
 
-- test 또는 `bootJar`가 실패하면 release bundle이 없고 deploy는 열리지 않습니다.
-- artifact가 있어도 EC2 전송이나 `deploy.sh`가 실패하면 verify로 넘어가지 않습니다.
-- 원격 `.env` heredoc이 닫히지 않으면 `deploy.sh`가 실행되지 않은 지점이 현재 저장소의 첫 deploy blocker입니다.
-- app 갱신 명령이 끝나도 `docker compose ps`, log 또는 `curl --fail`이 실패하면 배포 완료가 아닙니다.
-- workflow YAML과 repository에는 `${{ secrets.* }}` reference만 남깁니다. 실행 시 shell은 실제 secret 값을 펼쳐 EC2의 `.env` 파일에 기록합니다.
-- 현재 workflow에는 원격 `.env`를 만든 뒤 `chmod`, `chown`, restrictive `umask`로 권한을 강화하는 단계가 없습니다. reference 사용과 원격 파일 보호를 같은 보장으로 보지 않습니다.
+### deploy는 앱만 갱신합니다
 
-## 다음 질문
+MySQL과 Redis는 09 runtime scaffold에서 준비하는 장기 상태 서비스입니다.
+10의 배포는 전체 Compose stack을 내리지 않습니다.
 
-이 흐름은 기본 Docker Compose 배포와 검증까지 다룹니다.
-Rollback, 무중단 배포, observability, 알림은 실패 상태를 더 안전하게 복구하고 설명하기 위한 후속 운영 주제입니다.
+```text
+docker compose pull app
+docker compose up -d --no-recreate mysql redis
+docker compose up -d --no-deps app
+```
 
-[Visual Lab에서 입력 조건을 보고 경로 예측하기](./visual-lab/sequences/10/)
+실제 script는 Compose가 SHA image를 해석하도록 값을 export한 뒤 app service만 다룹니다.
+
+```bash
+export APP_IMAGE
+docker compose --env-file .env -f deploy/compose.prod.yaml pull app
+docker compose --env-file .env -f deploy/compose.prod.yaml up -d --no-recreate mysql redis
+docker compose --env-file .env -f deploy/compose.prod.yaml up -d --no-deps app
+```
+
+기존 MySQL과 Redis container가 있으면 다시 만들지 않고, 없거나 멈춘 서비스는 기동합니다.
+그 뒤 새 app image만 교체하므로 MySQL volume과 기존 데이터는 유지됩니다.
+첫 운영 배포 전에 적어도 09 Compose scaffold와 runtime `.env`가 준비되어 있어야 하는 이유이기도 합니다.
+
+### 성공 판정에는 실행 증거가 필요합니다
+
+배포 명령이 종료됐다는 사실과 서비스가 정상이라는 사실은 다릅니다.
+verify script는 다음 순서로 확인합니다.
+
+1. app container가 `running`인지 확인합니다.
+2. 선언된 image reference가 요청한 SHA tag인지 확인합니다.
+3. container image ID가 host의 해당 SHA image ID와 같은지 확인합니다.
+4. OCI revision label이 `${GITHUB_SHA}`와 같은지 확인합니다.
+5. 제한된 횟수 안에 HTTP 성공 응답이 오는지 확인합니다.
+
+실패하면 Compose 상태와 최근 app log를 출력해 첫 실패 경계를 찾습니다.
+
+### secret은 사용 위치에 따라 나눕니다
+
+| 위치 | 값 | 이유 |
+| --- | --- | --- |
+| GitHub Secrets | Docker Hub 계정/token, EC2 host/user/key/known_hosts | image 게시와 원격 접속에만 필요 |
+| EC2 `.env` | DB, Redis, JWT, OAuth, Mail, URL 설정 | 애플리케이션 runtime에만 필요 |
+
+Actions가 운영 `.env`를 매번 다시 쓰지 않으므로 긴 secret 목록이 workflow에 복제되지 않습니다.
+배포 파일을 갱신해도 EC2의 `.env`는 그대로 남습니다.
+
+### 가이드와 실제 서비스의 trigger는 다릅니다
+
+이 레포의 `main`은 여러 시퀀스와 수업 문서를 함께 관리하는 가이드 브랜치입니다.
+문서 수정만으로 실제 EC2가 바뀌지 않도록 deploy workflow는 `workflow_dispatch`만 허용하고 `main` 실행만 통과시킵니다.
+
+실제 서비스 레포에서는 같은 gate를 유지한 채 검토를 통과한 `main` push를 배포 trigger로 매핑할 수 있습니다.
+달라지는 것은 시작 조건이고, SHA image와 검증 계약은 같습니다.
+
+## 조기 수업 운영
+
+CI/CD를 09보다 먼저 설명해야 해도 공식 prerequisite는 `09`로 유지합니다.
+학생이 Dockerfile과 운영 설정을 동시에 완성하느라 자동화 흐름을 놓치지 않도록 멘토가 다음 09 결과를 scaffold로 제공합니다.
+
+- `build/libs/app.jar` 생성 계약
+- Dockerfile과 `.dockerignore`
+- `application-prod.yaml`
+- `deploy/compose.prod.yaml`
+- EC2 runtime `.env`
+- 실행 중인 MySQL과 Redis
+
+학생은 10에서 CI gate, registry 게시, exact image 배포, verify에 집중합니다.
+
+## 남은 범위
+
+이번 랩은 공개 Docker Hub 저장소, 단일 EC2, Docker Compose를 기준으로 합니다.
+private registry 인증, rollback, Blue-Green, Canary, Kubernetes, Terraform, observability와 알림은 후속 운영 주제입니다.
+
+[Visual Lab에서 CI/CD gate를 확인하기](./visual-lab/sequences/10/)

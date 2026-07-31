@@ -1,7 +1,10 @@
 .git
 .github
 .gradle
-build
+build/*
+!build/libs
+build/libs/*
+!build/libs/app.jar
 out
 docs
 README.md

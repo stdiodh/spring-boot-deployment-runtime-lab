@@ -1,6 +1,6 @@
 services:
   app:
-    image: aandi-deployment-runtime-lab:latest
+    image: "${APP_IMAGE:?}"
     container_name: aandi-app
     restart: unless-stopped
     depends_on:

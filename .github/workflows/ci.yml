@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Grant Gradle permission
+        run: chmod +x gradlew
+
+      - name: Run tests and build executable jar
+        run: ./gradlew clean test bootJar
+
+      - name: Check deployment artifact
+        run: test -f build/libs/app.jar
