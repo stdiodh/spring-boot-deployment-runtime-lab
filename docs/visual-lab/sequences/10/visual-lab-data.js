@@ -1,438 +1,700 @@
 window.visualLabData = {
   "kind": "sequence",
   "sequence": "10",
-  "title": "CI/CD Deployment",
-  "subtitle": "Automation and operations flow",
-  "goal": "실습 시작 상태의 build, deploy, verify 뼈대와 TODO를 읽고 artifact 전달, 배포, 검증 책임의 목표 경계를 이해합니다.",
-  "problem": "사람이 매번 같은 배포 명령을 손으로 반복하면 순서가 흔들리고 실패 기준이 누락될 수 있습니다.",
+  "title": "CI/CD + HTTPS Deployment",
+  "subtitle": "Tag release, TLS transition, and rollback",
+  "goal": "배포 태그가 exact SHA image와 HTTPS 진입점으로 이어질 때 첫 실패 gate와 최종 성공 증거를 구분합니다.",
+  "problem": "이미지 게시와 원격 명령이 끝나도 DNS, 인증서, proxy, 실행 revision과 외부 HTTPS 응답이 맞지 않으면 운영 배포는 완료가 아닙니다.",
   "workbench": {
     "kind": "pipeline",
-    "title": "배포가 통과하거나 멈추는 과정",
-    "instruction": "현재 TODO와 원격 heredoc blocker를 먼저 구분하고, 이를 고친 뒤 각 실패가 다음 job을 차단하는 목표 흐름을 확인하세요.",
+    "title": "HTTPS 릴리스의 첫 실패 게이트",
+    "instruction": "태그, DNS·80, 인증서와 새 app 상태를 바꾸며 어디에서 멈추고 무엇이 보존되는지 먼저 예상하세요.",
     "visual": {
       "src": "../../assets/diagrams/10-pipeline-gates.svg",
-      "alt": "TODO를 완성하고 heredoc 종료 경계를 수정했을 때 build가 artifact를 만들고 deploy가 서버를 갱신한 뒤 verify가 상태·로그·HTTP 응답을 확인하는 목표 파이프라인 게이트",
-      "caption": "세 job은 실습 목표입니다. 시작 상태의 TODO와 들여쓰기된 ENV 종료자를 고치고 실제 run 증거를 얻기 전에는 pipeline 통과를 단정하지 않습니다."
+      "alt": "annotated 배포 태그가 exact SHA image와 staging bundle을 만들고 DNS·HTTP-01을 거쳐 Nginx HTTPS로 전환된 뒤 외부 readiness 또는 이전 runtime 복구로 판정되는 세 경로",
+      "caption": "Release는 불변 image와 staging bundle을 만들고, HTTPS 전환은 DNS·HTTP-01·Nginx 경계를 통과하며, Verify는 외부 응답 실패 시 이전 runtime을 복원합니다."
     },
     "terms": [
-      { "term": "job", "meaning": "CI/CD workflow 안에서 하나의 책임을 수행하는 실행 단위" },
-      { "term": "artifact", "meaning": "build job이 만들고 다음 job으로 전달하는 검증된 배포 파일" },
-      { "term": "needs", "meaning": "이전 job 성공을 다음 job의 실행 조건으로 연결하는 의존 선언" },
-      { "term": "verify", "meaning": "배포 명령 이후 실제 서비스 상태를 증거로 확인하는 별도 단계" }
+      {
+        "term": "annotated tag",
+        "meaning": "tag object와 메시지를 가지며 운영 배포의 명시적 시작점이 되는 Git ref"
+      },
+      {
+        "term": "exact SHA image",
+        "meaning": "40자리 commit SHA tag와 같은 revision label로 실행 source를 고정한 image"
+      },
+      {
+        "term": "staging bundle",
+        "meaning": "현재 runtime을 바꾸기 전에 `.deploy-next`와 `.env.next`에서 검증하는 배포 파일 묶음"
+      },
+      {
+        "term": "HTTP-01",
+        "meaning": "인증기관이 도메인의 80번 HTTP 경로에서 token을 읽어 소유권을 확인하는 방식"
+      },
+      {
+        "term": "reverse proxy",
+        "meaning": "외부 TLS 요청을 종료하고 Docker network의 `app:8080`으로 전달하는 Nginx 책임"
+      },
+      {
+        "term": "rollback",
+        "meaning": "새 release 검증 실패 시 보존한 env, bundle과 image로 이전 runtime을 되살리는 작업"
+      },
+      {
+        "term": "cutover gate",
+        "meaning": "첫 외부 HTTPS 검증 전에는 이전 HTTP rollback port를 유지하고 성공 직후 닫는 전환 경계"
+      }
     ],
     "comparison": {
-      "label": "명령 실행과 서비스 검증",
+      "label": "직접 공개 runtime과 HTTPS 진입점",
       "left": {
-        "title": "deploy command",
-        "body": "release 파일을 배치하고 애플리케이션 container를 갱신하는 작업입니다. 명령 종료는 중간 상태입니다."
+        "title": "app :8080 직접 공개",
+        "body": "이전 기준은 EC2 host의 8080에서 Spring Boot readiness를 확인하며 TLS 종료와 도메인 인증이 없습니다."
       },
       "right": {
-        "title": "서비스 확인 완료",
-        "body": "compose 상태와 애플리케이션 로그를 관찰하고 HTTP health check가 성공한 상태입니다. ps와 log 내용을 별도로 판정하는 script는 아닙니다."
+        "title": "Nginx 80·443 공개",
+        "body": "첫 외부 HTTPS 검증 뒤 8080 인바운드를 닫고, app 8080은 Docker network 안에서 Nginx proxy target으로만 사용합니다."
       }
     },
     "nodes": {
-      "git-trigger": {
-        "label": "Git trigger",
+      "release-operator": {
+        "label": "Release operator",
         "icon": "person",
-        "kind": "trigger",
-        "role": "push 또는 수동 실행으로 workflow 시작",
-        "systemLayer": "outside",
-        "boundary": "Source event"
+        "kind": "release trigger",
+        "role": "deploy-https-v annotated tag push와 첫 전환 ingress 확인",
+        "boundary": "Source event",
+        "systemLayer": "outside"
       },
-      "github-actions": {
-        "label": "GitHub Actions",
+      "publish-job": {
+        "label": "Publish job",
         "icon": "pipeline",
-        "kind": "orchestrator",
-        "role": "job 순서와 needs gate 관리",
+        "kind": "release gate",
+        "role": "tag 검증, test·bootJar와 image 게시",
+        "boundary": "GitHub Actions",
         "systemLayer": "runtime",
-        "boundary": "Workflow",
         "codePointIds": [
-          "workflow-stages"
+          "tag-trigger"
         ]
       },
-      "build-job": {
-        "label": "build job",
-        "icon": "gate",
-        "kind": "job gate",
-        "role": "test, bootJar, artifact upload TODO를 가진 목표 gate",
-        "systemLayer": "runtime",
-        "boundary": "Build job",
-        "codePointIds": [
-          "workflow-stages"
-        ]
-      },
-      "release-bundle": {
-        "label": "release-bundle",
-        "icon": "artifact",
-        "kind": "artifact",
-        "role": "job 사이에서 전달되는 검증된 배포 파일",
-        "systemLayer": "runtime",
-        "boundary": "Artifact transfer"
+      "image-registry": {
+        "label": "Docker Hub",
+        "icon": "external",
+        "kind": "image registry",
+        "role": "exact SHA image와 release alias 보관",
+        "boundary": "Registry",
+        "systemLayer": "integration"
       },
       "deploy-job": {
-        "label": "deploy job",
-        "icon": "gate",
-        "kind": "job gate",
-        "role": "artifact download와 EC2 갱신 TODO를 가진 목표 gate",
+        "label": "Deploy job",
+        "icon": "pipeline",
+        "kind": "production gate",
+        "role": "runtime env 검증, DNS 확인과 EC2 staging 조율",
+        "boundary": "GitHub production",
         "systemLayer": "runtime",
-        "boundary": "Deploy job",
         "codePointIds": [
-          "workflow-stages"
+          "dns-gate",
+          "staging-validation"
         ]
       },
-      "secret-references": {
-        "label": "Secret references",
-        "icon": "security",
-        "kind": "protected config",
-        "role": "repository에는 참조만 두고 원격 .env에는 실제 값을 materialize",
+      "staged-release": {
+        "label": ".deploy-next",
+        "icon": "artifact",
+        "kind": "staged deployment artifact",
+        "role": "Compose, Nginx, scripts와 `.env.next`를 현재 runtime과 격리",
+        "boundary": "Staging boundary",
         "systemLayer": "runtime",
-        "boundary": "Trust boundary"
+        "codePointIds": [
+          "staging-validation"
+        ]
+      },
+      "dns-service": {
+        "label": "DNS resolver",
+        "icon": "external",
+        "kind": "name resolution service",
+        "role": "운영 도메인의 IPv4와 EC2 target 일치 여부 제공",
+        "boundary": "Public DNS",
+        "systemLayer": "integration",
+        "codePointIds": [
+          "dns-gate"
+        ]
       },
       "ec2-host": {
         "label": "EC2 host",
         "icon": "host",
         "kind": "runtime host",
-        "role": "release bundle을 받아 배포 script 실행",
-        "systemLayer": "runtime",
-        "boundary": "Remote runtime"
+        "role": "현재 bundle과 새 staging bundle을 분리해 보관",
+        "boundary": "Remote runtime",
+        "systemLayer": "runtime"
       },
       "deploy-script": {
-        "label": "scripts/deploy.sh",
+        "label": "deploy.sh",
         "icon": "tool",
         "kind": "deployment script",
-        "role": "app image build와 compose 갱신을 채워야 하는 TODO script",
+        "role": "상태 서비스 보존, 인증서 준비와 app image 교체",
+        "boundary": "Runtime transition",
         "systemLayer": "runtime",
-        "boundary": "Remote runtime",
         "codePointIds": [
-          "inline-deploy-steps"
+          "certificate-bootstrap"
+        ]
+      },
+      "nginx-http": {
+        "label": "Nginx :80",
+        "icon": "api",
+        "kind": "HTTP challenge endpoint",
+        "role": "webroot token 공개 후 일반 요청은 HTTPS로 전환",
+        "boundary": "Public HTTP",
+        "systemLayer": "interface",
+        "codePointIds": [
+          "certificate-bootstrap"
+        ]
+      },
+      "acme-ca": {
+        "label": "ACME CA",
+        "icon": "external",
+        "kind": "certificate authority",
+        "role": "도메인의 HTTP-01 token을 외부 80에서 확인",
+        "boundary": "Certificate trust",
+        "systemLayer": "integration"
+      },
+      "certbot": {
+        "label": "Certbot",
+        "icon": "security",
+        "kind": "certificate client",
+        "role": "최초 발급과 주기적 갱신 수행",
+        "boundary": "ACME client",
+        "systemLayer": "integration",
+        "codePointIds": [
+          "certificate-bootstrap"
+        ]
+      },
+      "certificate-volume": {
+        "label": "letsencrypt volume",
+        "icon": "config",
+        "kind": "certificate state",
+        "role": "fullchain과 private key를 app release와 별도로 보존",
+        "boundary": "Persistent TLS state",
+        "systemLayer": "resource"
+      },
+      "nginx-https": {
+        "label": "Nginx :443",
+        "icon": "api",
+        "kind": "TLS reverse proxy",
+        "role": "TLS 종료, forwarded·WebSocket header와 app proxy",
+        "boundary": "Public HTTPS",
+        "systemLayer": "interface",
+        "codePointIds": [
+          "https-proxy"
         ]
       },
       "app-container": {
-        "label": "Application container",
+        "label": "Spring Boot app",
         "icon": "runtime",
-        "kind": "runtime instance",
-        "role": "갱신된 애플리케이션 실행 단위",
-        "systemLayer": "runtime",
-        "boundary": "Remote runtime"
+        "kind": "application runtime",
+        "role": "Docker network의 8080에서 exact SHA image 실행",
+        "boundary": "Container runtime",
+        "systemLayer": "runtime"
+      },
+      "state-services": {
+        "label": "MySQL · Redis",
+        "icon": "database",
+        "kind": "state services",
+        "role": "재배포 중 container와 MySQL named volume 보존",
+        "boundary": "Persistent runtime",
+        "systemLayer": "resource"
       },
       "verify-job": {
-        "label": "verify job",
-        "icon": "gate",
-        "kind": "verification gate",
-        "role": "deploy 통과 뒤 서비스 증거 확인",
+        "label": "Verify job",
+        "icon": "pipeline",
+        "kind": "deployment verification gate",
+        "role": "원격 검증과 외부 HTTPS readiness 실행",
+        "boundary": "GitHub Actions",
         "systemLayer": "runtime",
-        "boundary": "Verify job",
         "codePointIds": [
-          "workflow-stages"
+          "verify-and-rollback"
         ]
       },
       "verify-script": {
-        "label": "scripts/check-deploy.sh",
+        "label": "check-deploy.sh",
         "icon": "test",
-        "kind": "verification script",
-        "role": "compose 상태·로그 출력 관찰과 HTTP 성공 확인",
+        "kind": "runtime verifier",
+        "role": "health, image, revision, redirect와 TLS readiness 판정",
+        "boundary": "Runtime evidence",
         "systemLayer": "runtime",
-        "boundary": "배포 확인 경계",
         "codePointIds": [
-          "inline-deploy-steps"
+          "verify-and-rollback"
         ]
       },
-      "http-response": {
-        "label": "HTTP response",
-        "icon": "response",
-        "kind": "runtime evidence",
-        "role": "애플리케이션 응답 가능 여부",
-        "systemLayer": "outside",
-        "boundary": "응답 확인 경계"
+      "external-client": {
+        "label": "Actions runner",
+        "icon": "client",
+        "kind": "external HTTPS client",
+        "role": "EC2 밖에서 인증서 검증을 켠 readiness 요청",
+        "boundary": "External network",
+        "systemLayer": "outside"
+      },
+      "security-group": {
+        "label": "EC2 Security Group",
+        "icon": "security",
+        "kind": "network access policy",
+        "role": "첫 전환 rollback port와 최종 80·443 공개 범위 관리",
+        "boundary": "Public ingress",
+        "systemLayer": "runtime"
+      },
+      "previous-release": {
+        "label": "Previous runtime",
+        "icon": "runtime",
+        "kind": "rollback target",
+        "role": "보존된 env, bundle과 image로 이전 서비스 복구",
+        "boundary": "Rollback boundary",
+        "systemLayer": "runtime",
+        "codePointIds": [
+          "verify-and-rollback"
+        ]
+      },
+      "dns-failure": {
+        "label": "DNS gate failure",
+        "icon": "evidence",
+        "kind": "DNS failure gate",
+        "role": "A record 불일치 또는 IPv6 설정을 첫 실패로 기록",
+        "boundary": "Before SSH",
+        "systemLayer": "runtime",
+        "codePointIds": [
+          "dns-gate"
+        ]
+      },
+      "acme-failure": {
+        "label": "HTTP-01 failure",
+        "icon": "evidence",
+        "kind": "certificate failure gate",
+        "role": "외부 80에서 challenge token을 읽지 못한 상태",
+        "boundary": "Before app update",
+        "systemLayer": "integration",
+        "codePointIds": [
+          "certificate-bootstrap"
+        ]
+      },
+      "runtime-failure": {
+        "label": "Runtime verify failure",
+        "icon": "evidence",
+        "kind": "deployment failure gate",
+        "role": "새 image 또는 HTTPS readiness 불일치를 rollback 입력으로 전달",
+        "boundary": "After app update",
+        "systemLayer": "runtime",
+        "codePointIds": [
+          "verify-and-rollback"
+        ]
       },
       "workflow-result": {
         "label": "Workflow result",
         "icon": "evidence",
-        "kind": "decision evidence",
-        "role": "build, deploy, verify의 최종 판정",
-        "systemLayer": "runtime",
-        "boundary": "Workflow result"
-      },
-      "build-failure": {
-        "label": "Build failure",
-        "icon": "evidence",
-        "kind": "failure evidence",
-        "role": "test 또는 bootJar의 첫 실패",
-        "systemLayer": "runtime",
-        "boundary": "Build job"
-      },
-      "deploy-failure": {
-        "label": "Deploy failure",
-        "icon": "evidence",
-        "kind": "failure evidence",
-        "role": "서버 파일 전달 또는 app 갱신 실패",
-        "systemLayer": "runtime",
-        "boundary": "Deploy job"
-      },
-      "heredoc-boundary": {
-        "label": ".env heredoc 종료 경계",
-        "icon": "evidence",
-        "kind": "shell parsing boundary",
-        "role": "들여쓰기된 ENV가 종료자로 인식되지 않아 뒤 명령을 .env에 포함",
-        "systemLayer": "runtime",
-        "boundary": "원격 shell"
-      },
-      "verify-failure": {
-        "label": "배포 검증 실패",
-        "icon": "evidence",
-        "kind": "failure evidence",
-        "role": "docker 명령 오류 또는 HTTP health check 실패",
-        "systemLayer": "runtime",
-        "boundary": "Verify job"
+        "kind": "release decision",
+        "role": "새 release의 최종 성공 또는 실패 기록",
+        "boundary": "Deployment result",
+        "systemLayer": "runtime"
       }
     },
     "scenarios": [
       {
-        "id": "pipeline-verified",
-        "label": "TODO·heredoc 수정 후 검증 목표",
-        "flowId": "build-deploy-verify",
+        "id": "fresh-https-release",
+        "label": "새 tag · DNS/80 준비",
+        "flowId": "release-to-https",
         "tone": "recovered",
-        "prompt": "workflow와 script TODO를 채우고 원격 `.env` 생성의 heredoc 종료 방식도 고쳤습니다.",
-        "observationTitle": "build부터 health까지 이어지는 gate",
+        "prompt": "인증서는 아직 없고 운영 도메인의 IPv4와 외부 80·443이 EC2를 향합니다. 첫 전환 rollback을 위해 기존 8080 인바운드를 유지한 채 새 annotated HTTPS tag를 push했습니다.",
+        "observationTitle": "태그부터 외부 HTTPS까지의 세 gate",
         "theoryRef": "../../../theory.md#seq-10",
         "reflection": {
-          "prompt": "deploy job이 green인데 서비스 접속이 안 될 때 다음에 볼 증거를 적어보세요.",
-          "hint": "ps·log로 process를 보고 `curl --fail`로 HTTP 응답을 확인하세요."
+          "prompt": "image 게시와 HTTPS 배포 성공을 가르는 마지막 증거를 자기 말로 적어보세요.",
+          "hint": "EC2 밖의 TLS 요청과 실행 image·revision을 함께 봅니다."
         },
         "prediction": {
-          "prompt": "어느 gate까지 통과해야 배포 성공으로 판단할 수 있을까요?",
+          "prompt": "어느 증거까지 확인해야 새 release를 성공으로 기록할 수 있을까요?",
           "options": [
-            { "id": "build", "label": "build job 성공" },
-            { "id": "deploy", "label": "deploy 스크립트 종료" },
-            { "id": "verify", "label": "ps·log 관찰 후 HTTP health check 성공" }
-          ],
-          "answer": "verify",
-          "explanation": "artifact 전달과 서버 갱신은 중간 상태입니다. 실제 서비스 증거를 확인하는 verify가 최종 gate입니다."
-        },
-        "route": [
-          "Push / workflow_dispatch",
-          "build job",
-          "Artifact",
-          "deploy job",
-          "deploy.sh",
-          "EC2 Runtime",
-          "verify job",
-          "check-deploy.sh",
-          "HTTP response"
-        ],
-        "diagram": {
-          "caption": "수정 후 목표는 build artifact를 EC2에 전달하고 deploy한 뒤 ps·log·HTTP health로 verify하는 흐름입니다.",
-          "lanes": [
             {
-              "id": "workflow-orchestration",
-              "label": "workflow 시작 → job 의존성",
-              "description": "각 job이 다음 `needs` gate를 여는 책임을 가집니다.",
-              "steps": [
-                {
-                  "from": "git-trigger",
-                  "to": "github-actions",
-                  "verb": "workflow 시작",
-                  "payload": "push | workflow_dispatch",
-                  "kind": "request",
-                  "effect": {
-                    "kind": "gate",
-                    "subject": "workflow trigger",
-                    "before": "GitHub Actions workflow는 event를 기다리는 상태",
-                    "after": "push 또는 `workflow_dispatch` event가 build job을 시작함"
-                  },
-                  "evidenceScope": "code"
-                },
-                {
-                  "from": "github-actions",
-                  "to": "build-job",
-                  "verb": "build 실행",
-                  "payload": "./gradlew test bootJar",
-                  "kind": "call",
-                  "codePointIds": [
-                    "workflow-stages"
-                  ],
-                  "effect": {
-                    "kind": "verify",
-                    "subject": "build artifact",
-                    "before": "source checkout 뒤 test result와 jar가 없음",
-                    "after": "build job이 test 통과 여부와 executable jar 생성을 결정함"
-                  },
-                  "evidenceScope": "test"
-                },
-                {
-                  "from": "build-job",
-                  "to": "release-bundle",
-                  "verb": "artifact 업로드",
-                  "payload": "release-bundle",
-                  "kind": "transform",
-                  "effect": {
-                    "kind": "persist",
-                    "subject": "`release-bundle`",
-                    "before": "jar와 배포 파일이 build runner filesystem에만 있음",
-                    "after": "Actions artifact storage에 `release-bundle`이 저장됨"
-                  },
-                  "evidenceScope": "runtime"
-                },
-                {
-                  "from": "release-bundle",
-                  "to": "deploy-job",
-                  "verb": "artifact 다운로드",
-                  "payload": "needs: build passed",
-                  "kind": "call",
-                  "effect": {
-                    "kind": "transfer",
-                    "subject": "`release-bundle`",
-                    "before": "deploy runner에는 build job의 release 파일이 없음",
-                    "after": "build 성공 뒤 deploy runner에 `release-bundle`이 내려옴"
-                  },
-                  "evidenceScope": "runtime"
-                },
-                {
-                  "from": "deploy-job",
-                  "to": "verify-job",
-                  "verb": "verify gate 개방",
-                  "payload": "needs: deploy passed",
-                  "kind": "call",
-                  "concept": "실패 차단 gate",
-                  "effect": {
-                    "kind": "gate",
-                    "subject": "verify job",
-                    "before": "deploy job이 끝나지 않아 verify job은 pending임",
-                    "after": "deploy exit code 0 뒤 verify job이 runnable 상태가 됨"
-                  },
-                  "evidenceScope": "code"
-                }
-              ]
+              "id": "published",
+              "label": "SHA image가 registry에 게시됨"
             },
             {
-              "id": "remote-deploy",
-              "label": "artifact 전달 → EC2 갱신",
-              "description": "deploy job이 bundle, 원격 `.env`, app 갱신 script를 연결합니다.",
+              "id": "proxied",
+              "label": "Nginx가 443에서 시작됨"
+            },
+            {
+              "id": "externally-ready",
+              "label": "exact revision과 외부 HTTPS readiness가 모두 맞음"
+            }
+          ],
+          "answer": "externally-ready",
+          "explanation": "image와 Nginx 기동은 중간 상태입니다. 실행 image·revision과 인증서를 검증하는 외부 HTTPS readiness가 모두 맞아야 합니다."
+        },
+        "route": [
+          "Annotated HTTPS tag",
+          "Publish job",
+          "Exact SHA image",
+          ".deploy-next",
+          "DNS · HTTP-01",
+          "Nginx :443",
+          "External HTTPS readiness",
+          "Workflow success",
+          "Close public :8080"
+        ],
+        "diagram": {
+          "caption": "HTTPS 전용 annotated tag가 exact SHA image와 staging bundle로 고정되고, 외부 HTTPS readiness 성공 뒤에만 rollback용 8080 인바운드를 닫습니다.",
+          "lanes": [
+            {
+              "id": "release-path",
+              "label": "Release · tag → SHA → staging",
+              "description": "source revision을 image와 EC2의 격리된 배포 입력으로 고정합니다.",
+              "nextLaneIds": [
+                "https-transition",
+                "verify-success"
+              ],
               "steps": [
                 {
-                  "from": "deploy-job",
-                  "to": "ec2-host",
-                  "verb": "전송과 원격 실행",
-                  "payload": "SCP release-bundle + SSH command",
-                  "kind": "call",
+                  "from": "release-operator",
+                  "to": "publish-job",
+                  "verb": "annotated tag push",
+                  "payload": "deploy-https-vX.Y.Z · target commit",
+                  "kind": "request",
                   "effect": {
                     "kind": "transfer",
-                    "subject": "deployment bundle",
-                    "before": "release 파일이 Actions runner에만 있음",
-                    "after": "SCP로 EC2 release directory에 bundle이 복사되고 SSH command가 시작됨"
+                    "subject": "배포 tag ref",
+                    "before": "원격에 이번 release tag가 없음",
+                    "after": "workflow가 tag object와 target commit을 읽음"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "tag-trigger"
+                  ]
+                },
+                {
+                  "from": "publish-job",
+                  "to": "publish-job",
+                  "verb": "tag gate 판정",
+                  "payload": "형식 · annotated object · 40자리 release SHA",
+                  "kind": "compare",
+                  "concept": "배포 이력과 source revision 고정",
+                  "effect": {
+                    "kind": "gate",
+                    "subject": "release_sha output",
+                    "before": "tag 이름만 있고 배포 가능한 target인지 판정되지 않음",
+                    "after": "모든 tag 조건을 통과한 40자리 commit SHA가 job output에 기록됨"
+                  },
+                  "evidenceScope": "code",
+                  "codePointIds": [
+                    "tag-trigger"
+                  ]
+                },
+                {
+                  "from": "publish-job",
+                  "to": "image-registry",
+                  "verb": "test·build·push",
+                  "payload": ":40자리 SHA image + release alias",
+                  "kind": "persist",
+                  "effect": {
+                    "kind": "persist",
+                    "subject": "registry image tags",
+                    "before": "이번 commit의 배포 image가 registry에 없음",
+                    "after": "같은 image ID를 가리키는 SHA tag와 release alias가 게시됨"
                   },
                   "evidenceScope": "runtime"
                 },
                 {
-                  "from": "secret-references",
-                  "to": "ec2-host",
-                  "verb": "운영 설정 주입",
-                  "payload": "GitHub Secrets 참조 → EC2 .env 실제 값",
-                  "kind": "config",
-                  "check": "repository와 log에는 값을 노출하지 않되, 원격 `.env`에는 실제 값이 기록됩니다. 현재 workflow는 파일 권한을 별도로 강화하지 않습니다.",
+                  "from": "publish-job",
+                  "to": "deploy-job",
+                  "verb": "production gate 개방",
+                  "payload": "needs: publish · release_sha",
+                  "kind": "call",
                   "effect": {
-                    "kind": "transfer",
-                    "subject": "secret values",
-                    "before": "repository와 release bundle에는 운영 secret 값 대신 참조만 있음",
-                    "after": "workflow shell이 GitHub Secrets 실제 값을 EC2 `.env` 파일에 materialize함"
+                    "kind": "gate",
+                    "subject": "deploy job",
+                    "before": "publish 결과가 없어 production job은 pending임",
+                    "after": "SHA image 게시 뒤 deploy job이 exact image reference를 조립함"
                   },
                   "evidenceScope": "code"
                 },
                 {
-                  "from": "ec2-host",
-                  "to": "deploy-script",
-                  "verb": "script 실행",
-                  "payload": "bash scripts/deploy.sh",
-                  "kind": "call",
-                  "codePointIds": [
-                    "inline-deploy-steps"
-                  ],
+                  "from": "deploy-job",
+                  "to": "staged-release",
+                  "verb": "배포 입력 staging",
+                  "payload": "Compose · Nginx templates · scripts · .env.next",
+                  "kind": "persist",
                   "effect": {
-                    "kind": "transfer",
-                    "subject": "deploy command",
-                    "before": "EC2 release directory에 bundle과 `.env`가 준비됨",
-                    "after": "EC2 shell이 `scripts/deploy.sh`를 실행함"
+                    "kind": "persist",
+                    "subject": "EC2 staging directory",
+                    "before": "EC2에는 현재 bundle과 runtime `.env`만 있음",
+                    "after": "새 파일이 `.deploy-next`와 mode 600 `.env.next`에 격리됨"
                   },
-                  "evidenceScope": "runtime"
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "staging-validation"
+                  ]
+                },
+                {
+                  "from": "staged-release",
+                  "to": "deploy-script",
+                  "verb": "검증 후 복구 가능한 설치",
+                  "payload": "compose config + previous snapshot + env swap",
+                  "kind": "transform",
+                  "effect": {
+                    "kind": "preserve",
+                    "subject": "현재와 이전 배포 bundle",
+                    "before": "새 Compose 입력은 staging에 있고 현재 runtime은 그대로임",
+                    "after": "config 통과 파일만 설치되고 이전 env·bundle은 rollback용으로 보존됨"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "staging-validation"
+                  ]
                 },
                 {
                   "from": "deploy-script",
                   "to": "app-container",
-                  "verb": "app 갱신",
-                  "payload": "docker build + compose up -d",
+                  "verb": "exact image 교체",
+                  "payload": "pull app + up --no-deps --force-recreate",
                   "kind": "transform",
-                  "check": "DB와 Redis를 불필요하게 내리는 흐름으로 해석하지 않습니다.",
                   "effect": {
                     "kind": "transform",
-                    "subject": "app container",
-                    "before": "EC2에 이전 app image 또는 container가 있음",
-                    "after": "새 image build와 `compose up -d` 뒤 app container가 교체됨"
+                    "subject": "aandi-app container",
+                    "before": "container가 이전 image reference를 실행함",
+                    "after": "container가 요청한 40자리 SHA image와 revision label을 실행함"
                   },
                   "evidenceScope": "runtime"
                 }
               ]
             },
             {
-              "id": "runtime-verification",
-              "label": "process 증거 → HTTP 검증",
-              "description": "배포 명령 종료와 서비스 정상 판정을 분리합니다.",
+              "id": "https-transition",
+              "label": "HTTPS transition · DNS → ACME → proxy",
+              "description": "도메인 소유권과 인증서 상태를 app image 교체와 분리해 확인합니다.",
+              "nextLaneIds": [
+                "verify-success"
+              ],
+              "steps": [
+                {
+                  "from": "deploy-job",
+                  "to": "dns-service",
+                  "verb": "도메인 target 확인",
+                  "payload": "PROD_DOMAIN A/AAAA ↔ EC2_HOST IPv4",
+                  "kind": "compare",
+                  "effect": {
+                    "kind": "verify",
+                    "subject": "운영 DNS 집합",
+                    "before": "도메인이 배포 EC2와 같은 주소인지 확인되지 않음",
+                    "after": "A record 전체가 EC2 IPv4와 같고 AAAA record가 없음을 확인함"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "dns-gate"
+                  ]
+                },
+                {
+                  "from": "deploy-script",
+                  "to": "nginx-http",
+                  "verb": "challenge endpoint 시작",
+                  "payload": "http.conf.template · port 80 · webroot volume",
+                  "kind": "config",
+                  "effect": {
+                    "kind": "transform",
+                    "subject": "Nginx bootstrap config",
+                    "before": "사용 가능한 인증서와 HTTP-01 endpoint가 없음",
+                    "after": "80번에서 challenge path만 제공하고 일반 요청은 503으로 닫힘"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "certificate-bootstrap"
+                  ]
+                },
+                {
+                  "from": "certbot",
+                  "to": "acme-ca",
+                  "verb": "인증서 요청",
+                  "payload": "domain · email · webroot HTTP-01",
+                  "kind": "request",
+                  "effect": {
+                    "kind": "transfer",
+                    "subject": "ACME order",
+                    "before": "해당 도메인의 발급 order가 없음",
+                    "after": "인증기관이 도메인과 challenge token을 검증 대상으로 가짐"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "certificate-bootstrap"
+                  ]
+                },
+                {
+                  "from": "acme-ca",
+                  "to": "nginx-http",
+                  "verb": "HTTP-01 token 조회",
+                  "payload": "GET /.well-known/acme-challenge/<token> :80",
+                  "kind": "request",
+                  "effect": {
+                    "kind": "verify",
+                    "subject": "도메인 소유권 증거",
+                    "before": "인증기관이 token 내용을 읽지 못한 상태",
+                    "after": "공개 DNS와 80번 경로를 통해 webroot token이 일치함"
+                  },
+                  "evidenceScope": "runtime"
+                },
+                {
+                  "from": "certbot",
+                  "to": "certificate-volume",
+                  "verb": "인증서 저장",
+                  "payload": "fullchain.pem + privkey.pem",
+                  "kind": "persist",
+                  "effect": {
+                    "kind": "persist",
+                    "subject": "letsencrypt named volume",
+                    "before": "도메인 certificate 파일이 없음",
+                    "after": "24시간 이상 유효한 fullchain과 private key가 persistent volume에 있음"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "certificate-bootstrap"
+                  ]
+                },
+                {
+                  "from": "certificate-volume",
+                  "to": "nginx-https",
+                  "verb": "TLS config 활성화",
+                  "payload": "https.conf.template · certificate read-only mount",
+                  "kind": "config",
+                  "effect": {
+                    "kind": "transform",
+                    "subject": "공개 진입점",
+                    "before": "80번 challenge endpoint만 실행 중임",
+                    "after": "80은 HTTPS로 이동하고 443은 도메인 인증서로 TLS를 종료함"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "https-proxy"
+                  ]
+                },
+                {
+                  "from": "nginx-https",
+                  "to": "app-container",
+                  "verb": "HTTPS 요청 proxy",
+                  "payload": "Host · X-Forwarded-* · WebSocket upgrade",
+                  "kind": "request",
+                  "effect": {
+                    "kind": "transfer",
+                    "subject": "외부 요청 위치",
+                    "before": "client 요청은 Nginx 443에서 TLS 종료됨",
+                    "after": "같은 요청이 Docker network의 `app:8080`에 forwarded header와 함께 도착함"
+                  },
+                  "evidenceScope": "code",
+                  "codePointIds": [
+                    "https-proxy"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "verify-success",
+              "label": "Verify + decision · runtime → external HTTPS",
+              "description": "컨테이너 명령 종료가 아니라 실행 identity와 외부 TLS 응답을 최종 증거로 사용합니다.",
               "steps": [
                 {
                   "from": "verify-job",
                   "to": "verify-script",
                   "verb": "원격 검증 실행",
-                  "payload": "bash scripts/check-deploy.sh",
+                  "payload": "expected image · release SHA · domain",
                   "kind": "call",
                   "effect": {
+                    "kind": "transfer",
+                    "subject": "배포 기대값",
+                    "before": "deploy job은 끝났지만 실행 상태가 판정되지 않음",
+                    "after": "검증 script가 exact image, revision과 domain을 입력으로 받음"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "verify-and-rollback"
+                  ]
+                },
+                {
+                  "from": "verify-script",
+                  "to": "state-services",
+                  "verb": "상태 서비스 health 확인",
+                  "payload": "mysql healthy + redis healthy",
+                  "kind": "compare",
+                  "effect": {
                     "kind": "verify",
-                    "subject": "verify script",
-                    "before": "deploy script는 끝났지만 서비스 success는 정해지지 않음",
-                    "after": "EC2 shell이 `scripts/check-deploy.sh`를 실행함"
+                    "subject": "Compose state services",
+                    "before": "MySQL과 Redis의 health status를 모름",
+                    "after": "두 service 모두 Docker health `healthy`임"
                   },
                   "evidenceScope": "runtime"
                 },
                 {
                   "from": "verify-script",
                   "to": "app-container",
-                  "verb": "상태와 로그 확인",
-                  "payload": "docker compose ps + docker logs",
+                  "verb": "실행 identity 확인",
+                  "payload": "running · image ref · image ID · OCI revision",
                   "kind": "compare",
                   "effect": {
                     "kind": "verify",
-                    "subject": "container evidence",
-                    "before": "app container의 running state와 startup outcome을 모름",
-                    "after": "`compose ps`와 `docker logs`가 container state와 startup failure를 출력함"
+                    "subject": "aandi-app 실행 identity",
+                    "before": "새 container가 요청한 source를 실행하는지 모름",
+                    "after": "Config.Image, image ID와 revision label이 기대 SHA와 모두 같음"
                   },
                   "evidenceScope": "runtime"
                 },
                 {
                   "from": "verify-script",
-                  "to": "http-response",
-                  "verb": "응답 확인",
-                  "payload": "curl http://localhost:8080/",
+                  "to": "nginx-https",
+                  "verb": "redirect·TLS readiness 확인",
+                  "payload": "HTTP 301 target + HTTPS readiness 2xx",
                   "kind": "request",
                   "effect": {
                     "kind": "verify",
-                    "subject": "HTTP health",
-                    "before": "Spring process가 port 8080에 응답하는지 모름",
-                    "after": "`curl --fail` exit code가 HTTP endpoint의 사용 가능 여부를 나타냄"
+                    "subject": "EC2 내부 공개 진입점",
+                    "before": "Nginx health와 도메인 응답이 확인되지 않음",
+                    "after": "HTTP가 같은 domain의 HTTPS로 이동하고 readiness가 인증서 검증과 함께 성공함"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "verify-and-rollback"
+                  ]
+                },
+                {
+                  "from": "external-client",
+                  "to": "nginx-https",
+                  "verb": "EC2 밖 readiness 요청",
+                  "payload": "GET https://<domain>/actuator/health/readiness",
+                  "kind": "request",
+                  "effect": {
+                    "kind": "verify",
+                    "subject": "외부 네트워크 증거",
+                    "before": "EC2 내부 curl만 성공한 상태",
+                    "after": "Actions runner가 public DNS와 유효한 TLS chain으로 readiness 2xx를 받음"
                   },
                   "evidenceScope": "runtime"
                 },
                 {
-                  "from": "http-response",
+                  "from": "verify-script",
                   "to": "workflow-result",
-                  "verb": "성공 판정",
-                  "payload": "ps·log output observed + HTTP health check passed",
+                  "verb": "release 성공 기록",
+                  "payload": "health + exact revision + redirect + external HTTPS",
                   "kind": "response",
                   "effect": {
                     "kind": "verify",
-                    "subject": "workflow success",
-                    "before": "ps·log·HTTP evidence가 모두 수집된 상태",
-                    "after": "container running과 health check 통과가 함께 확인돼 workflow가 success가 됨"
+                    "subject": "deployment result",
+                    "before": "각 runtime 증거가 개별적으로 수집됨",
+                    "after": "모든 필수 증거가 일치해 workflow가 success로 종료됨"
                   },
                   "evidenceScope": "runtime"
+                },
+                {
+                  "from": "release-operator",
+                  "to": "security-group",
+                  "verb": "rollback port 닫기",
+                  "payload": "remove public inbound :8080 · keep :80/:443",
+                  "kind": "config",
+                  "effect": {
+                    "kind": "transform",
+                    "subject": "EC2 public ingress",
+                    "before": "첫 HTTPS 전환 실패 시 이전 HTTP runtime으로 돌아가도록 8080 인바운드를 유지함",
+                    "after": "외부 HTTPS readiness 성공 직후 8080을 닫고 80·443만 공개함"
+                  },
+                  "evidenceScope": "manual",
+                  "check": "Security Group inbound에서 8080 제거와 80·443 유지를 확인합니다."
                 }
               ]
             }
@@ -440,407 +702,716 @@ window.visualLabData = {
         },
         "snapshot": [
           {
-            "label": "Workflow",
-            "value": "build · deploy · verify 통과",
+            "label": "실행 image",
+            "value": "40자리 SHA ref · 같은 revision label",
             "tone": "recovered"
           },
           {
-            "label": "성공 증거",
-            "value": "ps·log 출력 · HTTP health check",
+            "label": "공개 진입점",
+            "value": "80 redirect · 443 TLS · app:8080 내부",
+            "tone": "recovered"
+          },
+          {
+            "label": "최종 증거",
+            "value": "외부 HTTPS readiness 2xx",
+            "tone": "recovered"
+          },
+          {
+            "label": "최종 인바운드",
+            "value": "HTTPS 검증 뒤 80·443만 공개",
             "tone": "recovered"
           }
         ],
-        "evidence": "수정 후 실제 run의 artifact 전달, deploy script, compose·log, `curl --fail` 결과가 각각 필요합니다.",
-        "outcome": "수정만으로는 완료가 아니며 실제 run의 runtime 출력과 HTTP health가 성공해야 합니다."
+        "evidence": "workflow tag gate, registry SHA image, EC2 container identity, 외부 HTTPS readiness와 직후 Security Group 8080 제거를 순서대로 확인합니다.",
+        "outcome": "exact source의 외부 HTTPS 응답을 먼저 확정한 뒤 rollback용 8080을 닫아 전환을 끝냅니다."
       },
       {
-        "id": "pipeline-build-failed",
-        "label": "test·bootJar 실패",
-        "flowId": "build-deploy-verify",
+        "id": "dns-target-mismatch",
+        "label": "도메인 주소 불일치",
+        "flowId": "https-failure-gates",
         "tone": "blocked",
-        "prompt": "테스트 또는 bootJar가 실패했습니다.",
-        "observationTitle": "build 실패 뒤 닫힌 downstream gate",
+        "prompt": "운영 도메인의 A record 집합이 EC2 target IPv4와 다르거나 IPv4-only 배포에 AAAA record가 남아 있습니다.",
+        "observationTitle": "SSH 전에 닫히는 DNS gate",
         "theoryRef": "../../../theory.md#seq-10",
         "reflection": {
-          "prompt": "build gate 실패 뒤 실행되지 않는 job과 artifact를 적어보세요.",
-          "hint": "`release-bundle`이 없고 `needs` 조건 때문에 deploy가 열리지 않습니다."
+          "prompt": "DNS 오류가 EC2 runtime을 바꾸기 전에 멈춰야 하는 이유를 적어보세요.",
+          "hint": "인증기관과 사용자 모두 도메인을 따라 공개 진입점을 찾습니다."
         },
         "prediction": {
-          "prompt": "build가 실패하면 deploy job은 어떻게 될까요?",
+          "prompt": "이 조건에서 처음 실행되지 않아야 할 원격 작업은 무엇일까요?",
           "options": [
-            { "id": "continue", "label": "실패한 artifact로 계속 진행" },
-            { "id": "skip", "label": "needs 조건 때문에 실행하지 않음" },
-            { "id": "verify", "label": "verify만 먼저 실행" }
+            {
+              "id": "publish",
+              "label": "SHA image 게시"
+            },
+            {
+              "id": "ssh",
+              "label": "staging bundle SSH 업로드"
+            },
+            {
+              "id": "verify",
+              "label": "외부 HTTPS readiness만 생략"
+            }
           ],
-          "answer": "skip",
-          "explanation": "검증된 artifact가 없으므로 needs로 연결된 deploy와 verify는 시작되지 않아야 합니다."
+          "answer": "ssh",
+          "explanation": "publish 결과는 이미 있지만 deploy job의 DNS 검증이 실패합니다. bundle과 `.env.next`를 보내기 전에 workflow가 중단됩니다."
         },
         "route": [
-          "Push / workflow_dispatch",
-          "build job",
-          "Artifact",
-          "deploy job",
-          "verify job"
+          "Published SHA image",
+          "Deploy job",
+          "DNS comparison",
+          "DNS gate failure",
+          "SSH staging",
+          "EC2 runtime"
         ],
         "diagram": {
-          "caption": "build job 실패로 release bundle이 생기지 않고 `needs`가 deploy와 verify를 열지 않습니다.",
+          "caption": "deploy job이 도메인과 EC2의 주소 집합을 비교해 불일치를 찾고, SSH staging과 runtime 변경을 시작하지 않습니다.",
           "lanes": [
             {
-              "id": "build-blocked",
-              "label": "build 실패 → deploy 차단",
-              "description": "build job이 artifact 생성과 downstream 진입을 함께 막습니다.",
+              "id": "dns-blocked",
+              "label": "HTTPS prerequisite · DNS comparison",
+              "description": "public name resolution이 배포 target과 같은지 원격 접속 전에 판정합니다.",
               "steps": [
                 {
-                  "from": "git-trigger",
-                  "to": "github-actions",
-                  "verb": "workflow 시작",
-                  "payload": "push | workflow_dispatch",
-                  "kind": "request",
-                  "effect": {
-                    "kind": "gate",
-                    "subject": "workflow trigger",
-                    "before": "GitHub Actions workflow는 event를 기다리는 상태",
-                    "after": "push 또는 `workflow_dispatch` event가 build job을 시작함"
-                  },
-                  "evidenceScope": "code"
-                },
-                {
-                  "from": "github-actions",
-                  "to": "build-job",
-                  "verb": "test와 build 실행",
-                  "payload": "./gradlew test bootJar",
+                  "from": "publish-job",
+                  "to": "deploy-job",
+                  "verb": "production gate 개방",
+                  "payload": "published exact SHA image",
                   "kind": "call",
                   "effect": {
-                    "kind": "verify",
-                    "subject": "build gate",
-                    "before": "trigger 뒤 release artifact 생성 가능 여부가 정해지지 않음",
-                    "after": "test와 `bootJar` exit code가 build job의 pass·fail을 결정함"
+                    "kind": "gate",
+                    "subject": "deploy job",
+                    "before": "publish job의 결과를 기다리는 상태",
+                    "after": "release_sha를 받은 deploy job이 runtime prerequisite 검사를 시작함"
                   },
-                  "evidenceScope": "test"
+                  "evidenceScope": "runtime"
                 },
                 {
-                  "from": "build-job",
-                  "to": "build-failure",
-                  "verb": "첫 실패 기록",
-                  "payload": "test 또는 bootJar failure",
+                  "from": "deploy-job",
+                  "to": "dns-service",
+                  "verb": "주소 집합 조회",
+                  "payload": "domain IPv4/IPv6 + EC2_HOST IPv4",
+                  "kind": "request",
+                  "effect": {
+                    "kind": "transfer",
+                    "subject": "DNS lookup 결과",
+                    "before": "workflow가 실제 A·AAAA record를 모름",
+                    "after": "domain과 target의 IPv4 집합 및 domain IPv6 집합을 가짐"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "dns-gate"
+                  ]
+                },
+                {
+                  "from": "dns-service",
+                  "to": "dns-failure",
+                  "verb": "DNS gate 거부",
+                  "payload": "A mismatch 또는 unexpected AAAA",
                   "kind": "failure",
-                  "check": "실패한 step과 log를 먼저 확인합니다.",
                   "effect": {
                     "kind": "gate",
-                    "subject": "build job",
-                    "before": "test 또는 `bootJar`가 non-zero exit code로 끝남",
-                    "after": "`release-bundle`이 생기지 않고 deploy job은 skipped가 됨"
+                    "subject": "remote deployment path",
+                    "before": "도메인 주소가 EC2 target과 다름",
+                    "after": "deploy job이 non-zero로 끝나 SSH와 EC2 변경이 차단됨"
                   },
-                  "evidenceScope": "test"
+                  "evidenceScope": "runtime",
+                  "check": "workflow의 DNS error와 원격 bundle 미전송 상태를 확인합니다.",
+                  "codePointIds": [
+                    "dns-gate"
+                  ]
                 }
               ]
             }
           ],
           "notReached": [
             {
-              "label": "release-bundle",
-              "reason": "build가 실패해 artifact를 업로드하지 못했습니다."
+              "label": ".deploy-next와 .env.next 업로드",
+              "reason": "DNS gate가 Configure SSH보다 먼저 실패했습니다."
             },
             {
-              "label": "deploy job",
-              "reason": "needs: build 조건이 충족되지 않아 blocked 상태입니다."
+              "label": "Nginx · Certbot · app 교체",
+              "reason": "원격 배포 script가 실행되지 않아 현재 EC2 runtime은 그대로입니다."
             },
             {
-              "label": "verify job",
-              "reason": "deploy가 실행되지 않았으므로 검증도 시작되지 않습니다."
+              "label": "HTTPS readiness verify",
+              "reason": "deploy job이 실패해 needs 조건이 충족되지 않습니다."
             }
           ]
         },
         "snapshot": [
           {
             "label": "첫 실패",
-            "value": "build 실패 · deploy 차단",
+            "value": "DNS address set comparison",
             "tone": "blocked"
           },
           {
-            "label": "Artifact",
-            "value": "생성되지 않음",
+            "label": "EC2 변경",
+            "value": "SSH 전 · 변경 없음",
             "tone": "blocked"
+          },
+          {
+            "label": "기존 rollback port",
+            "value": "8080 인바운드 유지",
+            "tone": "warning"
           }
         ],
-        "evidence": "workflow run의 첫 실패 step, release bundle 부재, downstream job의 skipped 상태를 확인합니다.",
-        "outcome": "처음 실패한 build step을 원인 분석의 출발점으로 삼습니다.",
-        "stopAfter": 1
+        "evidence": "deploy job의 DNS error와 Configure SSH 이후 step의 skipped 상태가 이 gate의 범위입니다.",
+        "outcome": "공개 도메인이 배포 target과 일치하지 않으면 원격 runtime을 건드리지 않고 먼저 DNS를 고칩니다.",
+        "stopAfter": 3
       },
       {
-        "id": "pipeline-deploy-failed",
-        "label": "원격 .env heredoc 미종료",
-        "flowId": "workflow-step-responsibility",
+        "id": "port-80-closed",
+        "label": "DNS 정상 · 외부 80 차단",
+        "flowId": "https-failure-gates",
         "tone": "blocked",
-        "prompt": "원격 `.env` heredoc의 종료자 `ENV` 앞에 공백이 남아 있습니다.",
-        "observationTitle": "닫히지 않은 heredoc과 deploy 미실행",
+        "prompt": "도메인의 IPv4는 EC2와 같고 사용 가능한 인증서는 없지만 Security Group 또는 방화벽이 외부 80을 막고 있습니다.",
+        "observationTitle": "app 교체 전에 실패하는 HTTP-01",
         "theoryRef": "../../../theory.md#seq-10",
         "reflection": {
-          "prompt": "workflow job 상태와 실제 deploy script 실행을 분리하는 증거를 적어보세요.",
-          "hint": "heredoc 종료자는 들여쓰기 없이 전달돼야 하며 job green만으로 원격 command 실행을 보장하지 않습니다."
+          "prompt": "인증서 실패 뒤 기존 app image가 유지되는 경계를 적어보세요.",
+          "hint": "`compose pull app`보다 먼저 실행되는 HTTP challenge를 봅니다."
         },
         "prediction": {
-          "prompt": "들여쓰기된 `ENV` 뒤의 deploy command는 어떻게 처리될까요?",
+          "prompt": "인증기관이 80번 challenge에 닿지 못하면 새 app은 어떻게 될까요?",
           "options": [
-            { "id": "build", "label": "정상적으로 별도 실행" },
-            { "id": "deploy", "label": ".env 내용으로 소비되어 실행 안 됨" },
-            { "id": "verify", "label": "자동으로 권한까지 강화" }
+            {
+              "id": "updated",
+              "label": "인증서 없이 먼저 새 app으로 교체"
+            },
+            {
+              "id": "unchanged",
+              "label": "app 교체 전 중단하고 기존 image 유지"
+            },
+            {
+              "id": "self-signed",
+              "label": "자동으로 자체 서명 인증서 사용"
+            }
           ],
-          "answer": "deploy",
-          "explanation": "공백이 남은 `ENV`는 heredoc 종료자가 아닙니다. 뒤의 chmod와 deploy.sh 호출이 `.env` 입력으로 소비될 수 있어 실제 app 갱신이 재현되지 않습니다."
+          "answer": "unchanged",
+          "explanation": "사용 가능한 인증서를 먼저 확보한 뒤 app을 pull·recreate합니다. HTTP-01 실패는 application update flag가 켜지기 전이라 기존 app을 유지합니다."
         },
         "route": [
-          "build job",
-          "Artifact",
-          "deploy job",
-          "cat > .env <<ENV",
-          "들여쓰기된 ENV",
-          "deploy.sh line swallowed"
+          "DNS pass",
+          ".deploy-next installed",
+          "MySQL · Redis preserved",
+          "Nginx HTTP challenge",
+          "ACME public :80 request",
+          "HTTP-01 failure",
+          "Previous runtime restored",
+          "New app update"
         ],
         "diagram": {
-          "caption": "artifact 전달 뒤 heredoc이 닫히지 않아 chmod와 deploy.sh 줄이 `.env` 입력으로 소비될 수 있습니다.",
+          "caption": "DNS 검증과 staging은 통과하지만 인증기관의 80번 요청이 막혀 certificate 발급이 실패하고, 새 app 교체 전에 이전 runtime 구성을 되돌립니다.",
           "lanes": [
             {
-              "id": "deploy-blocked",
-              "label": "artifact 전달 → 원격 shell parsing blocker",
-              "description": "원격 shell이 `.env` 입력과 실행할 command를 구분합니다.",
+              "id": "acme-prerequisite",
+              "label": "Release prerequisite · DNS → staging",
+              "description": "원격 certificate 요청 전까지 통과한 준비 단계를 구분합니다.",
+              "nextLaneIds": [
+                "acme-blocked"
+              ],
               "steps": [
                 {
-                  "from": "build-job",
-                  "to": "release-bundle",
-                  "verb": "artifact 업로드",
-                  "payload": "release-bundle",
-                  "kind": "transform",
+                  "from": "deploy-job",
+                  "to": "dns-service",
+                  "verb": "도메인 target 확인",
+                  "payload": "domain A records = EC2 IPv4",
+                  "kind": "compare",
                   "effect": {
-                    "kind": "persist",
-                    "subject": "`release-bundle`",
-                    "before": "jar와 배포 파일이 build runner filesystem에만 있음",
-                    "after": "Actions artifact storage에 `release-bundle`이 저장됨"
+                    "kind": "verify",
+                    "subject": "DNS prerequisite",
+                    "before": "도메인 주소가 배포 target과 같은지 모름",
+                    "after": "A record가 EC2 IPv4와 같고 AAAA record가 없음"
                   },
-                  "evidenceScope": "runtime"
-                },
-                {
-                  "from": "release-bundle",
-                  "to": "deploy-job",
-                  "verb": "artifact 다운로드",
-                  "payload": "needs: build passed",
-                  "kind": "call",
-                  "effect": {
-                    "kind": "transfer",
-                    "subject": "`release-bundle`",
-                    "before": "deploy runner에는 build job의 release 파일이 없음",
-                    "after": "build 성공 뒤 deploy runner에 `release-bundle`이 내려옴"
-                  },
-                  "evidenceScope": "runtime"
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "dns-gate"
+                  ]
                 },
                 {
                   "from": "deploy-job",
-                  "to": "ec2-host",
-                  "verb": "전송과 원격 실행",
-                  "payload": "SCP + SSH",
+                  "to": "staged-release",
+                  "verb": "배포 입력 staging",
+                  "payload": "Nginx templates · scripts · mode 600 .env.next",
+                  "kind": "persist",
+                  "effect": {
+                    "kind": "persist",
+                    "subject": "EC2 staging bundle",
+                    "before": "현재 배포 파일만 EC2에 있음",
+                    "after": "새 구성은 `.deploy-next`와 `.env.next`에서 검증됨"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "staging-validation"
+                  ]
+                },
+                {
+                  "from": "staged-release",
+                  "to": "deploy-script",
+                  "verb": "배포 script 시작",
+                  "payload": "exact image · domain · certificate email",
                   "kind": "call",
                   "effect": {
-                    "kind": "transfer",
-                    "subject": "deployment bundle",
-                    "before": "release 파일이 Actions runner에만 있음",
-                    "after": "SCP로 EC2 release directory에 bundle이 복사되고 SSH command가 시작됨"
+                    "kind": "preserve",
+                    "subject": "rollback inputs",
+                    "before": "현재 env와 bundle만 설치되어 있음",
+                    "after": "이전 env·bundle을 복사한 뒤 새 runtime 전환을 시작함"
                   },
                   "evidenceScope": "runtime"
-                },
+                }
+              ]
+            },
+            {
+              "id": "acme-blocked",
+              "label": "HTTPS transition · HTTP-01 blocked",
+              "description": "bootstrap Nginx와 외부 80 사이에서 처음 끊긴 증거를 확인합니다.",
+              "steps": [
                 {
-                  "from": "ec2-host",
-                  "to": "heredoc-boundary",
-                  "verb": ".env 작성 시작",
-                  "payload": "cat > .env <<ENV",
+                  "from": "deploy-script",
+                  "to": "nginx-http",
+                  "verb": "challenge endpoint 시작",
+                  "payload": "port 80 + /.well-known/acme-challenge/",
                   "kind": "config",
                   "effect": {
-                    "kind": "transfer",
-                    "subject": "원격 `.env` heredoc",
-                    "before": "EC2 release directory에 운영 `.env`가 아직 완성되지 않음",
-                    "after": "remote shell이 `ENV` 종료자를 기다리며 이후 줄을 `.env` 입력으로 읽음"
+                    "kind": "transform",
+                    "subject": "aandi-nginx bootstrap",
+                    "before": "도메인 인증서를 읽는 HTTPS config를 시작할 수 없음",
+                    "after": "HTTP 전용 config가 local health를 통과하고 token 경로를 기다림"
                   },
-                  "evidenceScope": "code"
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "certificate-bootstrap"
+                  ]
                 },
                 {
-                  "from": "heredoc-boundary",
-                  "to": "deploy-failure",
-                  "verb": "들여쓰기된 종료자 무시",
-                  "payload": "  ENV + chmod + deploy.sh lines",
+                  "from": "certbot",
+                  "to": "acme-ca",
+                  "verb": "HTTP-01 order 요청",
+                  "payload": "domain · webroot token",
+                  "kind": "request",
+                  "effect": {
+                    "kind": "transfer",
+                    "subject": "ACME validation target",
+                    "before": "인증기관이 challenge URL을 조회하지 않음",
+                    "after": "인증기관이 public domain의 80번 token URL을 조회하려 함"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "certificate-bootstrap"
+                  ]
+                },
+                {
+                  "from": "acme-ca",
+                  "to": "acme-failure",
+                  "verb": "public challenge 도달 실패",
+                  "payload": "TCP :80 blocked · token unavailable",
                   "kind": "failure",
-                  "check": "종료자를 들여쓰기 없이 전달하거나 `printf`로 바꾼 뒤 command trace를 확인합니다.",
                   "effect": {
                     "kind": "gate",
-                    "subject": "remote deploy command",
-                    "before": "`ENV` 앞 공백 때문에 heredoc이 닫히지 않음",
-                    "after": "chmod와 deploy.sh 줄이 `.env` 내용으로 소비되어 app 갱신 command가 실행되지 않음"
+                    "subject": "certificate files",
+                    "before": "fullchain과 private key 발급에 HTTP-01 proof가 필요함",
+                    "after": "인증기관이 token을 읽지 못해 certificate files가 생성되지 않음"
                   },
-                  "evidenceScope": "code"
+                  "evidenceScope": "runtime",
+                  "check": "Certbot error와 외부 80 인바운드 설정을 함께 확인합니다."
+                },
+                {
+                  "from": "acme-failure",
+                  "to": "deploy-script",
+                  "verb": "app update 차단",
+                  "payload": "certbot non-zero before compose pull app",
+                  "kind": "failure",
+                  "effect": {
+                    "kind": "gate",
+                    "subject": "application update flag",
+                    "before": "APPLICATION_UPDATE_STARTED 값이 0임",
+                    "after": "deploy trap이 새 image pull과 app recreate를 실행하지 않음"
+                  },
+                  "evidenceScope": "code",
+                  "codePointIds": [
+                    "certificate-bootstrap"
+                  ]
+                },
+                {
+                  "from": "deploy-script",
+                  "to": "previous-release",
+                  "verb": "bootstrap 구성 정리",
+                  "payload": "previous env · previous bundle · existing app",
+                  "kind": "transform",
+                  "effect": {
+                    "kind": "preserve",
+                    "subject": "기존 application runtime",
+                    "before": "HTTP challenge Nginx가 잠시 실행되고 새 env·bundle이 설치됨",
+                    "after": "이전 env·bundle을 복원하고 기존 app image는 교체하지 않음"
+                  },
+                  "evidenceScope": "runtime"
                 }
               ]
             }
           ],
           "notReached": [
             {
-              "label": "scripts/deploy.sh 실행",
-              "reason": "해당 줄이 닫히지 않은 `.env` heredoc 내용으로 소비됩니다."
+              "label": "fullchain.pem과 privkey.pem",
+              "reason": "인증기관이 공개 80번의 token을 읽지 못해 발급되지 않습니다."
             },
             {
-              "label": "실제 app 갱신 증거",
-              "reason": "SSH step이 0으로 끝날 수도 있으므로 job 상태와 별개로 command 실행이 확인되지 않습니다."
+              "label": "새 exact SHA app 교체",
+              "reason": "certificate usability gate가 `compose pull app`보다 먼저 실패합니다."
+            },
+            {
+              "label": "Nginx 443과 verify job",
+              "reason": "TLS config로 전환되지 못해 deploy job이 실패합니다."
             }
           ]
         },
         "snapshot": [
           {
-            "label": "Deploy",
-            "value": "deploy.sh 실행 안 됨",
+            "label": "첫 실패",
+            "value": "ACME public :80 reachability",
             "tone": "blocked"
           },
           {
-            "label": "job 상태",
-            "value": "green 가능 · 실제 배포 미확인",
-            "tone": "blocked"
+            "label": "app image",
+            "value": "기존 reference 유지",
+            "tone": "recovered"
+          },
+          {
+            "label": "상태 volume",
+            "value": "MySQL · certificate named volume 삭제 없음",
+            "tone": "recovered"
+          },
+          {
+            "label": "rollback 인바운드",
+            "value": "외부 HTTPS 성공 전 8080 유지",
+            "tone": "warning"
           }
         ],
-        "evidence": "SCP는 release 배치까지만 보여줍니다. 현재 heredoc에서는 deploy.sh 실행과 app 갱신 증거가 없습니다.",
-        "outcome": "원격 command trace가 없으면 job 상태만으로 실제 deploy 성공을 판단할 수 없습니다.",
-        "stopAfter": 3
+        "evidence": "Certbot HTTP-01 error, app container의 기존 image reference와 deploy log의 application update 이전 중단을 확인합니다.",
+        "outcome": "외부 80은 HTTP 서비스 공개 목적이 아니라 최초 인증과 갱신 가능성을 위해 먼저 열려 있어야 합니다.",
+        "stopAfter": 6
       },
       {
-        "id": "pipeline-verify-failed",
-        "label": "deploy 후 HTTP 응답 없음",
-        "flowId": "workflow-step-responsibility",
+        "id": "readiness-failure-rollback",
+        "label": "새 app readiness 실패",
+        "flowId": "verify-and-rollback",
         "tone": "warning",
-        "prompt": "app container 갱신 명령은 끝났지만 `curl --fail`이 실패했습니다.",
-        "observationTitle": "deploy 완료와 health 실패 사이",
+        "prompt": "첫 HTTPS 전환에서 인증서와 Nginx는 준비됐지만 새 exact SHA app의 readiness가 실패합니다. 이전 HTTP env·bundle·image와 rollback용 8080 인바운드는 보존돼 있습니다.",
+        "observationTitle": "검증 실패 뒤 infra rollback 경계",
         "theoryRef": "../../../theory.md#seq-10",
         "reflection": {
-          "prompt": "deploy가 끝났어도 완료로 볼 수 없는 조건을 적어보세요.",
-          "hint": "첫 실패한 ps, log, curl 항목과 runtime log를 연결하세요."
+          "prompt": "rollback 성공과 새 release 성공이 왜 같은 판정이 아닌지 적어보세요.",
+          "hint": "복구된 사용자 상태와 시도한 release의 결과를 분리합니다."
         },
         "prediction": {
-          "prompt": "deploy는 끝났지만 HTTP 확인이 실패했습니다. 현재 상태는 무엇일까요?",
+          "prompt": "이전 HTTP readiness가 복구되면 이번 workflow 결과는 무엇일까요?",
           "options": [
-            { "id": "complete", "label": "배포 완료" },
-            { "id": "rollback", "label": "자동 rollback 완료" },
-            { "id": "unverified", "label": "갱신됐지만 정상 여부는 미확인" }
+            {
+              "id": "success",
+              "label": "rollback이 성공했으므로 새 release도 성공"
+            },
+            {
+              "id": "failed-restored",
+              "label": "새 release는 실패, 이전 runtime은 복구"
+            },
+            {
+              "id": "volumes-reset",
+              "label": "DB와 인증서 volume을 삭제하고 재시작"
+            }
           ],
-          "answer": "unverified",
-          "explanation": "파일 전달과 container 갱신만으로 서비스 정상 상태를 보장하지 않습니다. verify 실패 증거를 해결해야 합니다."
+          "answer": "failed-restored",
+          "explanation": "rollback은 기존 서비스 가용성을 되살리지만 새 release의 readiness 실패를 성공으로 바꾸지 않습니다. verify script는 끝까지 non-zero로 종료합니다."
         },
         "route": [
-          "Artifact",
-          "deploy job",
-          "deploy.sh",
-          "EC2 Runtime",
-          "verify job",
-          "check-deploy.sh",
-          "배포 성공 판정"
+          "New exact SHA app",
+          "Verify job",
+          "HTTPS readiness failure",
+          "Previous env · bundle · image",
+          "Previous HTTP readiness",
+          "Workflow failed"
         ],
         "diagram": {
-          "caption": "container 갱신이 끝나도 compose 상태, log, HTTP 증거 중 하나가 실패하면 배포 성공 판정을 보류합니다.",
+          "caption": "새 app image가 실행된 뒤 HTTPS readiness가 실패하면 이전 HTTP bundle과 image를 복원하고 상태 volume은 보존하지만, 시도한 release는 실패로 남습니다.",
           "lanes": [
             {
-              "id": "verify-warning",
-              "label": "deploy 통과 → verify 실패",
-              "description": "verify job이 container 갱신과 서비스 응답을 분리해 판정합니다.",
+              "id": "release-applied",
+              "label": "Release · 새 runtime 적용",
+              "description": "rollback이 필요한 시점을 app image 교체 이후로 한정합니다.",
+              "nextLaneIds": [
+                "verify-failed",
+                "infra-rollback"
+              ],
               "steps": [
                 {
-                  "from": "release-bundle",
-                  "to": "deploy-job",
-                  "verb": "배포 입력 전달",
-                  "payload": "release-bundle",
-                  "kind": "call",
+                  "from": "staged-release",
+                  "to": "deploy-script",
+                  "verb": "검증된 bundle 설치",
+                  "payload": "new env · Compose · Nginx · scripts",
+                  "kind": "transform",
                   "effect": {
-                    "kind": "transfer",
-                    "subject": "`release-bundle`",
-                    "before": "artifact storage에 검증된 bundle이 있음",
-                    "after": "deploy job workspace에 같은 bundle이 복원됨"
+                    "kind": "preserve",
+                    "subject": "rollback inputs",
+                    "before": "현재 HTTP runtime만 설치되어 있음",
+                    "after": "이전 env·bundle·image marker를 보존하고 HTTPS bundle을 설치함"
                   },
-                  "evidenceScope": "runtime"
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "staging-validation"
+                  ]
                 },
                 {
-                  "from": "deploy-job",
+                  "from": "deploy-script",
                   "to": "app-container",
-                  "verb": "app 갱신 완료",
-                  "payload": "scripts/deploy.sh",
+                  "verb": "새 app recreate",
+                  "payload": "exact SHA image",
                   "kind": "transform",
                   "effect": {
                     "kind": "transform",
-                    "subject": "app container",
-                    "before": "deploy runner가 bundle을 EC2로 보냈지만 container 상태는 이전 값",
-                    "after": "deploy script 종료 뒤 app container가 새 image를 가리킴"
+                    "subject": "aandi-app container",
+                    "before": "이전 HTTP image가 실행 중임",
+                    "after": "새 40자리 SHA image container가 Docker network에서 실행 중임"
                   },
                   "evidenceScope": "runtime"
                 },
                 {
-                  "from": "deploy-job",
-                  "to": "verify-job",
-                  "verb": "verify gate 개방",
-                  "payload": "needs: deploy passed",
-                  "kind": "call",
+                  "from": "certificate-volume",
+                  "to": "nginx-https",
+                  "verb": "HTTPS 진입점 활성화",
+                  "payload": "domain certificate + proxy config",
+                  "kind": "config",
                   "effect": {
-                    "kind": "gate",
-                    "subject": "verify job",
-                    "before": "deploy job이 끝나지 않아 verify job은 pending임",
-                    "after": "deploy exit code 0 뒤 verify job이 runnable 상태가 됨"
+                    "kind": "transform",
+                    "subject": "host 공개 port",
+                    "before": "이전 app의 host 8080이 HTTP 진입점임",
+                    "after": "Nginx 80·443이 공개되고 app 8080은 container network 안에 있음"
                   },
-                  "evidenceScope": "code"
-                },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "https-proxy"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "verify-failed",
+              "label": "Verify · HTTPS readiness 실패",
+              "description": "실행 identity와 실제 application readiness를 별도 증거로 판정합니다.",
+              "nextLaneIds": [
+                "infra-rollback"
+              ],
+              "steps": [
                 {
                   "from": "verify-job",
                   "to": "verify-script",
-                  "verb": "증거 수집",
-                  "payload": "compose ps output + logs + curl --fail",
+                  "verb": "검증 기대값 전달",
+                  "payload": "exact image · revision · domain",
+                  "kind": "call",
+                  "effect": {
+                    "kind": "transfer",
+                    "subject": "verify inputs",
+                    "before": "새 runtime은 시작했지만 성공 여부를 모름",
+                    "after": "check script가 image와 HTTPS origin을 판정 기준으로 가짐"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "verify-and-rollback"
+                  ]
+                },
+                {
+                  "from": "verify-script",
+                  "to": "app-container",
+                  "verb": "image identity 통과",
+                  "payload": "running · image ref · image ID · revision",
                   "kind": "compare",
                   "effect": {
                     "kind": "verify",
-                    "subject": "runtime evidence",
-                    "before": "app 갱신 명령만 끝나 HTTP 사용 가능 여부는 모름",
-                    "after": "verify script가 ps output·startup log·`curl --fail` exit code를 모음"
+                    "subject": "새 app identity",
+                    "before": "container가 새 image로 시작했다는 사실만 있음",
+                    "after": "요청한 SHA image와 OCI revision이 실행 container에서 일치함"
                   },
                   "evidenceScope": "runtime"
                 },
                 {
                   "from": "verify-script",
-                  "to": "verify-failure",
-                  "verb": "성공 판정 중단",
-                  "payload": "docker command error or HTTP health check failure",
-                  "kind": "failure",
-                  "check": "실패한 첫 검증 항목과 runtime log를 연결합니다.",
+                  "to": "nginx-https",
+                  "verb": "readiness 재시도",
+                  "payload": "HTTPS /actuator/health/readiness",
+                  "kind": "request",
                   "effect": {
-                    "kind": "gate",
-                    "subject": "verify job",
-                    "before": "deploy는 통과했지만 ps·log·health 중 하나가 실패함",
-                    "after": "첫 docker command error 또는 health failure에서 workflow가 failed가 됨"
+                    "kind": "verify",
+                    "subject": "application readiness response",
+                    "before": "TLS 진입점과 image identity는 확인됨",
+                    "after": "제한된 재시도 동안 readiness 2xx를 받지 못함"
                   },
                   "evidenceScope": "runtime"
+                },
+                {
+                  "from": "nginx-https",
+                  "to": "runtime-failure",
+                  "verb": "새 release 거부",
+                  "payload": "HTTPS readiness non-zero",
+                  "kind": "failure",
+                  "effect": {
+                    "kind": "gate",
+                    "subject": "deployment attempt",
+                    "before": "새 container는 실행 중이나 readiness가 실패함",
+                    "after": "workflow success가 차단되고 rollback 함수가 호출됨"
+                  },
+                  "evidenceScope": "runtime",
+                  "check": "첫 실패 항목과 app log를 rollback 전에 확인합니다.",
+                  "codePointIds": [
+                    "verify-and-rollback"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "infra-rollback",
+              "label": "Rollback · 이전 runtime 복구",
+              "description": "이전 HTTP bundle을 되살리면서 MySQL과 인증서 volume을 삭제하지 않습니다.",
+              "steps": [
+                {
+                  "from": "runtime-failure",
+                  "to": "previous-release",
+                  "verb": "rollback 시작",
+                  "payload": ".env.previous + .deploy.previous + .previous-image",
+                  "kind": "transform",
+                  "effect": {
+                    "kind": "transform",
+                    "subject": "배포 파일과 app image reference",
+                    "before": "실패한 HTTPS bundle과 새 SHA image가 현재 값임",
+                    "after": "이전 HTTP env·bundle과 image reference가 현재 값으로 복원됨"
+                  },
+                  "evidenceScope": "runtime",
+                  "codePointIds": [
+                    "verify-and-rollback"
+                  ]
+                },
+                {
+                  "from": "previous-release",
+                  "to": "state-services",
+                  "verb": "상태 서비스 보존",
+                  "payload": "up --no-recreate mysql redis",
+                  "kind": "persist",
+                  "effect": {
+                    "kind": "preserve",
+                    "subject": "MySQL data와 Redis process",
+                    "before": "새 app 검증이 실패했지만 상태 service는 실행 중임",
+                    "after": "container와 MySQL named volume을 삭제하지 않고 healthy 상태를 재확인함"
+                  },
+                  "evidenceScope": "runtime"
+                },
+                {
+                  "from": "previous-release",
+                  "to": "app-container",
+                  "verb": "이전 app 복원",
+                  "payload": "pull previous image + force-recreate app",
+                  "kind": "transform",
+                  "effect": {
+                    "kind": "transform",
+                    "subject": "aandi-app container",
+                    "before": "readiness에 실패한 새 SHA image가 실행 중임",
+                    "after": "보존한 이전 image reference의 app container가 실행 중임"
+                  },
+                  "evidenceScope": "runtime"
+                },
+                {
+                  "from": "previous-release",
+                  "to": "certificate-volume",
+                  "verb": "TLS state 보존",
+                  "payload": "named volume retained · proxy containers removed",
+                  "kind": "persist",
+                  "effect": {
+                    "kind": "preserve",
+                    "subject": "letsencrypt named volume",
+                    "before": "첫 HTTPS 시도에서 certificate files가 저장됨",
+                    "after": "이전 HTTP Compose로 돌아가도 certificate volume은 삭제되지 않음"
+                  },
+                  "evidenceScope": "runtime"
+                },
+                {
+                  "from": "verify-script",
+                  "to": "app-container",
+                  "verb": "이전 HTTP readiness 확인",
+                  "payload": "GET http://127.0.0.1:8080/actuator/health/readiness",
+                  "kind": "request",
+                  "effect": {
+                    "kind": "verify",
+                    "subject": "rollback service availability",
+                    "before": "이전 image container가 다시 시작됨",
+                    "after": "host 8080의 이전 readiness가 2xx로 복구됨"
+                  },
+                  "evidenceScope": "runtime"
+                },
+                {
+                  "from": "release-operator",
+                  "to": "app-container",
+                  "verb": "이전 외부 HTTP 경로 확인",
+                  "payload": "GET http://<ec2>:8080/actuator/health/readiness",
+                  "kind": "request",
+                  "effect": {
+                    "kind": "verify",
+                    "subject": "legacy rollback ingress",
+                    "before": "로컬 127.0.0.1:8080 readiness만 복구됨",
+                    "after": "유지한 Security Group 8080 rule로 이전 HTTP runtime에 다시 접근 가능함"
+                  },
+                  "evidenceScope": "manual"
+                },
+                {
+                  "from": "verify-script",
+                  "to": "workflow-result",
+                  "verb": "시도한 release 실패 기록",
+                  "payload": "rollback ready + original verify non-zero",
+                  "kind": "response",
+                  "effect": {
+                    "kind": "verify",
+                    "subject": "deployment result",
+                    "before": "이전 사용자 경로는 복구됐지만 새 release는 readiness에 실패함",
+                    "after": "rollback 상태와 별개로 workflow가 failed로 종료됨"
+                  },
+                  "evidenceScope": "code",
+                  "codePointIds": [
+                    "verify-and-rollback"
+                  ]
                 }
               ]
             }
           ],
           "notReached": [
             {
-              "label": "Workflow success",
-              "reason": "verify 증거가 모두 통과하지 않아 배포 완료로 확정하지 않습니다."
+              "label": "새 release의 Workflow success",
+              "reason": "rollback이 성공해도 원래 HTTPS readiness 실패는 그대로 남습니다."
+            },
+            {
+              "label": "Security Group 8080 제거",
+              "reason": "외부 HTTPS readiness가 성공하지 않아 이전 HTTP rollback 경로를 계속 유지합니다."
             }
           ]
         },
         "snapshot": [
           {
-            "label": "Verify",
-            "value": "compose · log · HTTP 증거 부족",
-            "tone": "warning"
+            "label": "새 release",
+            "value": "HTTPS readiness 실패",
+            "tone": "blocked"
           },
           {
-            "label": "배포 성공 판정",
-            "value": "보류",
+            "label": "이전 runtime",
+            "value": "HTTP :8080 readiness 복구",
+            "tone": "recovered"
+          },
+          {
+            "label": "지속 상태",
+            "value": "MySQL · certificate volume 보존",
+            "tone": "recovered"
+          },
+          {
+            "label": "외부 rollback 경로",
+            "value": "8080 인바운드 유지",
             "tone": "warning"
           }
         ],
-        "evidence": "check-deploy.sh는 docker 명령 오류 없이 ps·log 출력을 보여주고, `curl --fail`이 성공해야 0으로 종료합니다. 로그 내용의 정상 여부를 자동 판정하지는 않습니다.",
-        "outcome": "artifact와 container가 갱신돼도 HTTP health가 실패하면 배포 완료가 아닙니다.",
-        "stopAfter": 5
+        "evidence": "check script의 첫 HTTPS readiness failure, 이전 image recreation과 HTTP readiness 복구, 마지막 non-zero exit를 순서대로 확인합니다.",
+        "outcome": "rollback은 장애 범위를 줄이는 복구 동작이며 검증에 실패한 새 release를 성공으로 바꾸지 않습니다."
       }
     ]
   },
@@ -851,8 +1422,8 @@ window.visualLabData = {
   "defaultSequence": "10",
   "actors": [
     {
-      "id": "developer",
-      "label": "개발자",
+      "id": "operator",
+      "label": "Release operator",
       "kind": "person"
     },
     {
@@ -861,406 +1432,493 @@ window.visualLabData = {
       "kind": "ci"
     },
     {
-      "id": "build",
-      "label": "Deploy Workflow",
-      "kind": "ci"
+      "id": "registry",
+      "label": "Docker Hub",
+      "kind": "external"
     },
     {
-      "id": "deploy",
-      "label": "Upload/Deploy Steps",
-      "kind": "ci"
+      "id": "dns",
+      "label": "Public DNS",
+      "kind": "external"
     },
     {
-      "id": "infra",
-      "label": "EC2 Runtime",
+      "id": "ec2",
+      "label": "EC2 runtime",
       "kind": "infra"
     },
     {
+      "id": "nginx",
+      "label": "Nginx",
+      "kind": "server"
+    },
+    {
+      "id": "certbot",
+      "label": "Certbot",
+      "kind": "security"
+    },
+    {
       "id": "app",
-      "label": "Running App",
+      "label": "Spring Boot app",
       "kind": "server"
     }
   ],
   "flows": [
     {
-      "id": "build-deploy-verify",
-      "title": "test -> build -> upload -> deploy 흐름",
-      "summary": "자동화의 핵심은 성공 경로뿐 아니라 실패하면 다음 단계로 넘어가지 않는 차단 경로입니다.",
-      "mermaid": "sequenceDiagram\n  actor Developer\n  participant Build as build job\n  participant Deploy as deploy job\n  participant Verify as verify job\n  participant Server as Runtime server\n  Developer->>Build: push or workflow_dispatch\n  Build->>Build: test, bootJar, artifact upload\n  Build->>Deploy: release artifact\n  Deploy->>Server: deploy.sh\n  Deploy->>Verify: needs deploy\n  Verify->>Server: check-deploy.sh\n  Server-->>Verify: compose, log, HTTP result",
+      "id": "release-to-https",
+      "title": "tag에서 HTTPS success까지",
+      "summary": "source identity, certificate trust와 runtime evidence를 서로 다른 gate로 고정합니다.",
       "steps": [
         {
+          "id": "release-to-https-step-1",
           "order": 1,
-          "actor": "Developer",
-          "input": "Push event",
-          "owner": "GitHub Actions",
-          "action": "workflow를 시작합니다.",
-          "output": "Deploy workflow",
-          "note": "자동화는 변경 이벤트를 기준으로 같은 순서를 반복합니다.",
-          "id": "build-deploy-verify-step-1",
-          "from": "Developer",
-          "to": "GitHub Actions",
-          "message": "workflow를 시작합니다.",
+          "from": "Release operator",
+          "to": "Publish job",
+          "message": "annotated HTTPS release tag를 검증합니다.",
           "messageKind": "request",
-          "problem": "Push event",
-          "concept": "GitHub Actions",
-          "check": "Deploy workflow",
+          "problem": "기존 09 HTTP tag나 브랜치 push가 10 HTTPS 운영 배포를 시작하면 의도하지 않은 EC2 변경이 생길 수 있습니다.",
+          "concept": "HTTPS release tag gate",
+          "action": "deploy-https-v 형식, tag object와 target commit을 확인합니다.",
+          "check": "workflow의 tag 검증 step과 40자리 release SHA output을 확인합니다.",
           "codePointIds": [
-            "workflow-stages",
-            "inline-deploy-steps"
+            "tag-trigger"
           ]
         },
         {
+          "id": "release-to-https-step-2",
           "order": 2,
-          "actor": "GitHub Actions",
-          "input": "Source code",
-          "owner": "Deploy workflow",
-          "action": "test와 build를 실행합니다.",
-          "output": "Artifact",
-          "note": "build가 실패하면 deploy는 실행되지 않아야 합니다.",
-          "id": "build-deploy-verify-step-2",
-          "from": "GitHub Actions",
-          "to": "Deploy workflow",
-          "message": "test와 build를 실행합니다.",
+          "from": "Publish job",
+          "to": "Docker Hub",
+          "message": "한 image를 SHA와 release alias로 게시합니다.",
           "messageKind": "request",
-          "problem": "Source code",
-          "concept": "Deploy workflow",
-          "check": "Artifact",
-          "codePointIds": [
-            "inline-deploy-steps",
-            "workflow-stages"
-          ]
+          "problem": "사람용 release 이름만으로는 실행 source를 불변하게 식별하기 어렵습니다.",
+          "concept": "Exact SHA image",
+          "action": "revision label이 같은 SHA image와 release alias를 push합니다.",
+          "check": "registry tag의 image ID와 revision label을 비교합니다."
         },
         {
+          "id": "release-to-https-step-3",
           "order": 3,
-          "actor": "Deploy workflow",
-          "input": "Artifact",
-          "owner": "Upload and deploy steps",
-          "action": "release bundle을 서버로 업로드하고 EC2 배포 명령을 실행합니다.",
-          "output": "Restarted service",
-          "note": "workflow는 원격 실행 순서를 조율합니다.",
-          "id": "build-deploy-verify-step-3",
-          "from": "Deploy workflow",
-          "to": "Upload and deploy steps",
-          "message": "release bundle을 서버로 업로드하고 EC2 배포 명령을 실행합니다.",
+          "from": "Deploy job",
+          "to": "EC2 staging",
+          "message": "새 runtime 입력을 현재 release와 격리합니다.",
           "messageKind": "request",
-          "problem": "Artifact",
-          "concept": "Upload and deploy steps",
-          "check": "Restarted service",
+          "problem": "검증하지 않은 env나 Compose 파일이 현재 runtime을 바로 덮으면 rollback 입력도 잃을 수 있습니다.",
+          "concept": "Staging and atomic install",
+          "action": "`.deploy-next`와 `.env.next`를 검증하고 이전 bundle을 보존합니다.",
+          "check": "Compose config, file mode 600과 previous snapshot을 확인합니다.",
           "codePointIds": [
-            "workflow-stages",
-            "inline-deploy-steps"
+            "staging-validation"
           ]
         },
         {
+          "id": "release-to-https-step-4",
           "order": 4,
-          "actor": "Upload and deploy steps",
-          "input": "Running service",
-          "owner": "Log check step",
-          "action": "compose 상태와 앱 로그로 배포 결과를 확인합니다.",
-          "output": "Deployment result",
-          "note": "verify 실패는 배포 실패로 봐야 합니다.",
-          "id": "build-deploy-verify-step-4",
-          "from": "Upload and deploy steps",
-          "to": "Log check step",
-          "message": "compose 상태와 앱 로그로 배포 결과를 확인합니다.",
-          "messageKind": "response",
-          "problem": "Running service",
-          "concept": "Log check step",
-          "check": "Deployment result",
+          "from": "Certbot",
+          "to": "Nginx",
+          "message": "HTTP-01 proof 뒤 TLS 진입점을 엽니다.",
+          "messageKind": "request",
+          "problem": "인증서 파일이 없는데 HTTPS config를 먼저 시작하면 Nginx가 기동하지 못합니다.",
+          "concept": "HTTP bootstrap before TLS",
+          "action": "80번 webroot로 인증서를 발급한 뒤 443 config로 전환합니다.",
+          "check": "certificate files와 Nginx config health를 확인합니다.",
           "codePointIds": [
-            "inline-deploy-steps",
-            "workflow-stages"
+            "certificate-bootstrap",
+            "https-proxy"
           ]
+        },
+        {
+          "id": "release-to-https-step-5",
+          "order": 5,
+          "from": "Verify job",
+          "to": "Public HTTPS",
+          "message": "exact revision과 외부 readiness를 판정합니다.",
+          "messageKind": "response",
+          "problem": "원격 명령 종료만으로는 실행 source와 사용자 경로의 정상 상태를 알 수 없습니다.",
+          "concept": "Runtime and external evidence",
+          "action": "health, image identity, redirect와 외부 TLS readiness를 모두 확인합니다.",
+          "check": "check script와 Actions runner curl이 모두 성공했는지 확인합니다.",
+          "codePointIds": [
+            "verify-and-rollback"
+          ]
+        },
+        {
+          "id": "release-to-https-step-6",
+          "order": 6,
+          "from": "Release operator",
+          "to": "EC2 Security Group",
+          "message": "외부 HTTPS 성공 뒤 rollback port를 닫습니다.",
+          "messageKind": "response",
+          "problem": "첫 전환 검증 전에 8080을 닫으면 HTTPS 실패 시 복구한 이전 HTTP runtime에 접근할 경로를 잃습니다.",
+          "concept": "Safe cutover window",
+          "action": "외부 HTTPS 2xx 전까지 8080 인바운드를 유지하고, 성공 직후 제거합니다.",
+          "check": "Security Group에는 80·443만 남고 public 8080 규칙이 제거됐는지 확인합니다."
         }
-      ],
-      "bandKind": "scenario"
+      ]
     },
     {
-      "id": "workflow-step-responsibility",
-      "title": "배포와 검증 script 책임 흐름",
-      "summary": "이번 시퀀스는 workflow가 순서를 조율하고 deploy.sh와 check-deploy.sh가 서버 작업을 나눠 맡습니다.",
+      "id": "https-failure-gates",
+      "title": "DNS와 HTTP-01 첫 실패 gate",
+      "summary": "실패 위치에 따라 EC2를 전혀 바꾸지 않거나 app image 교체 전에 bootstrap 구성만 되돌립니다.",
       "steps": [
         {
+          "id": "https-failure-gates-step-1",
           "order": 1,
-          "actor": "Workflow",
-          "input": "Artifact and secrets",
-          "owner": "deploy.sh",
-          "action": "release 파일을 배치하고 애플리케이션 컨테이너를 갱신합니다.",
-          "output": "Runtime update",
-          "note": "workflow는 원격 실행을 조율하고 서버 재기동 책임은 deploy.sh에 둡니다.",
-          "id": "workflow-step-responsibility-step-1",
-          "from": "Workflow",
-          "to": "deploy.sh",
-          "message": "release 파일을 배치하고 애플리케이션 컨테이너를 갱신합니다.",
+          "from": "Deploy job",
+          "to": "Public DNS",
+          "message": "도메인과 EC2 주소를 비교합니다.",
           "messageKind": "request",
-          "problem": "Artifact and secrets",
-          "concept": "deploy.sh",
-          "check": "Runtime update",
+          "problem": "도메인이 다른 host를 가리키면 certificate와 사용자 요청이 배포 EC2에 도착하지 않습니다.",
+          "concept": "DNS prerequisite",
+          "action": "A record 집합과 IPv4-only 조건을 SSH 전에 확인합니다.",
+          "check": "DNS failure에서 원격 step이 skipped인지 확인합니다.",
           "codePointIds": [
-            "workflow-stages",
-            "inline-deploy-steps"
+            "dns-gate"
           ]
         },
         {
+          "id": "https-failure-gates-step-2",
           "order": 2,
-          "actor": "Workflow",
-          "input": "Runtime endpoint",
-          "owner": "check-deploy.sh",
-          "action": "배포 후 compose 상태, 앱 로그, HTTP 응답을 확인합니다.",
-          "output": "Pass or fail",
-          "note": "배포 완료 기준은 명령 종료가 아니라 서비스 확인입니다.",
-          "id": "workflow-step-responsibility-step-2",
-          "from": "Workflow",
-          "to": "check-deploy.sh",
-          "message": "배포 후 compose 상태, 앱 로그, HTTP 응답을 확인합니다.",
+          "from": "Deploy script",
+          "to": "Nginx HTTP",
+          "message": "인증서가 없으면 80번 challenge endpoint를 시작합니다.",
           "messageKind": "request",
-          "problem": "Runtime endpoint",
-          "concept": "check-deploy.sh",
-          "check": "Pass or fail",
+          "problem": "TLS config는 certificate files가 생긴 뒤에만 유효합니다.",
+          "concept": "Certificate bootstrap",
+          "action": "HTTP template과 webroot volume으로 임시 Nginx를 시작합니다.",
+          "check": "Nginx health와 challenge path를 확인합니다.",
           "codePointIds": [
-            "inline-deploy-steps",
-            "workflow-stages"
+            "certificate-bootstrap"
           ]
         },
         {
+          "id": "https-failure-gates-step-3",
           "order": 3,
-          "actor": "GitHub Actions",
-          "input": "Step result",
-          "owner": "Workflow status",
-          "action": "실패한 step을 기준으로 전체 결과를 실패 처리합니다.",
-          "output": "Action result",
-          "note": "처음 실패한 단계가 원인 분석의 출발점입니다.",
-          "id": "workflow-step-responsibility-step-3",
-          "from": "GitHub Actions",
-          "to": "Workflow status",
-          "message": "실패한 step을 기준으로 전체 결과를 실패 처리합니다.",
+          "from": "ACME CA",
+          "to": "Public port 80",
+          "message": "HTTP-01 token 도달 여부를 판정합니다.",
           "messageKind": "error",
-          "problem": "Step result",
-          "concept": "Workflow status",
-          "check": "Action result",
+          "problem": "DNS가 맞아도 외부 80이 닫히면 인증기관은 webroot token을 읽지 못합니다.",
+          "concept": "Public reachability gate",
+          "action": "Certbot error와 Security Group 80 인바운드를 연결해 확인합니다.",
+          "check": "certificate files가 생성되지 않았는지 확인합니다."
+        },
+        {
+          "id": "https-failure-gates-step-4",
+          "order": 4,
+          "from": "Deploy script",
+          "to": "Previous runtime",
+          "message": "app update 이전 실패를 정리합니다.",
+          "messageKind": "response",
+          "problem": "certificate 실패가 기존 사용자 경로까지 불필요하게 바꾸면 장애 범위가 커집니다.",
+          "concept": "Pre-update recovery",
+          "action": "이전 env·bundle을 복원하고 기존 app image를 유지합니다.",
+          "check": "deploy log와 app image reference가 바뀌지 않았는지 확인합니다."
+        }
+      ]
+    },
+    {
+      "id": "verify-and-rollback",
+      "title": "runtime verify와 infra rollback",
+      "summary": "새 release 검증 실패와 이전 서비스 복구를 서로 다른 결과로 기록합니다.",
+      "steps": [
+        {
+          "id": "verify-and-rollback-step-1",
+          "order": 1,
+          "from": "Verify job",
+          "to": "Running stack",
+          "message": "service health와 실행 identity를 확인합니다.",
+          "messageKind": "request",
+          "problem": "container running만으로는 DB, Redis와 source revision 일치를 알 수 없습니다.",
+          "concept": "Exact runtime identity",
+          "action": "health, image ref, image ID와 OCI revision을 비교합니다.",
+          "check": "기대 SHA와 네 가지 실행 증거가 모두 같은지 확인합니다."
+        },
+        {
+          "id": "verify-and-rollback-step-2",
+          "order": 2,
+          "from": "Verify script",
+          "to": "Nginx HTTPS",
+          "message": "redirect와 readiness를 제한 시간 동안 재시도합니다.",
+          "messageKind": "request",
+          "problem": "image identity가 맞아도 application dependency가 준비되지 않을 수 있습니다.",
+          "concept": "HTTPS readiness",
+          "action": "인증서 검증을 끄지 않고 readiness 2xx와 HTTP redirect를 확인합니다.",
+          "check": "첫 non-zero 검증 항목과 app log를 확인합니다."
+        },
+        {
+          "id": "verify-and-rollback-step-3",
+          "order": 3,
+          "from": "Runtime failure",
+          "to": "Previous release",
+          "message": "이전 env, bundle과 image를 복원합니다.",
+          "messageKind": "error",
+          "problem": "실패한 app을 그대로 두면 사용자의 기존 정상 경로도 잃습니다.",
+          "concept": "Infrastructure rollback",
+          "action": "previous snapshot으로 app과 공개 진입점을 되돌립니다.",
+          "check": "이전 image reference가 다시 실행되는지 확인합니다.",
           "codePointIds": [
-            "workflow-stages",
-            "inline-deploy-steps"
+            "verify-and-rollback"
           ]
         },
         {
-          "id": "workflow-step-responsibility-check-4",
+          "id": "verify-and-rollback-step-4",
           "order": 4,
-          "actor": "Workflow status",
-          "owner": "확인 지점",
-          "from": "Workflow status",
-          "to": "확인 지점",
-          "message": "결과와 실패 지점을 확인합니다.",
+          "from": "Previous release",
+          "to": "Persistent state",
+          "message": "DB와 certificate volume을 보존합니다.",
           "messageKind": "response",
-          "problem": "구현 후 실제로 어느 지점이 통과했는지 확인해야 합니다.",
-          "concept": "배포 결과 검증",
-          "action": "문서의 확인 명령이나 화면에서 결과를 검증합니다.",
-          "check": "성공 흐름과 실패 흐름을 말로 설명합니다.",
-          "note": "Visual Lab은 코드를 대신 완성하지 않고 확인 지점을 고정합니다.",
+          "problem": "release rollback이 장기 상태를 삭제하면 복구가 더 큰 데이터 손실을 만듭니다.",
+          "concept": "State preservation",
+          "action": "MySQL·Redis는 no-recreate로 두고 named volume을 삭제하지 않습니다.",
+          "check": "MySQL data와 letsencrypt volume이 남았는지 확인합니다."
+        },
+        {
+          "id": "verify-and-rollback-step-5",
+          "order": 5,
+          "from": "Verify script",
+          "to": "Workflow result",
+          "message": "복구와 release 결과를 따로 기록합니다.",
+          "messageKind": "response",
+          "problem": "rollback 성공을 새 release 성공으로 해석하면 실패한 변경이 배포 완료로 남습니다.",
+          "concept": "Attempt result",
+          "action": "이전 readiness를 확인한 뒤에도 원래 검증 실패로 종료합니다.",
+          "check": "workflow가 failed이고 이전 서비스만 ready인지 확인합니다.",
           "codePointIds": [
-            "inline-deploy-steps"
+            "verify-and-rollback"
           ]
         }
-      ],
-      "bandKind": "scenario"
+      ]
     }
   ],
   "flow": [
     {
-      "id": "build-deploy-verify-step-1",
-      "label": "GitHub Actions",
-      "problem": "Push event",
-      "concept": "GitHub Actions",
-      "action": "workflow를 시작합니다.",
-      "check": "Deploy workflow",
+      "id": "release-to-https-step-1",
+      "label": "HTTPS tag gate",
+      "problem": "운영 배포 시작점을 명시적으로 고정해야 합니다.",
+      "concept": "Annotated tag",
+      "action": "deploy-https-v 형식, tag object와 target SHA를 확인합니다.",
+      "check": "release SHA output을 확인합니다.",
       "codePointIds": [
-        "workflow-stages",
-        "inline-deploy-steps"
+        "tag-trigger"
       ]
     },
     {
-      "id": "build-deploy-verify-step-2",
-      "label": "Deploy workflow",
-      "problem": "Source code",
-      "concept": "Deploy workflow",
-      "action": "test와 build를 실행합니다.",
-      "check": "Artifact",
+      "id": "release-to-https-step-2",
+      "label": "Exact SHA image",
+      "problem": "registry와 EC2가 같은 source를 실행해야 합니다.",
+      "concept": "Immutable release identity",
+      "action": "SHA tag와 revision label을 맞춥니다.",
+      "check": "image ID와 OCI revision을 비교합니다."
+    },
+    {
+      "id": "release-to-https-step-3",
+      "label": "HTTPS bootstrap",
+      "problem": "certificate 없이 TLS config를 시작할 수 없습니다.",
+      "concept": "DNS and HTTP-01",
+      "action": "80번 webroot proof 뒤 443을 활성화합니다.",
+      "check": "certificate files와 Nginx health를 확인합니다.",
       "codePointIds": [
-        "inline-deploy-steps",
-        "workflow-stages"
+        "dns-gate",
+        "certificate-bootstrap"
       ]
     },
     {
-      "id": "build-deploy-verify-step-3",
-      "label": "Upload and deploy steps",
-      "problem": "Artifact",
-      "concept": "Upload and deploy steps",
-      "action": "release bundle을 서버로 업로드하고 EC2 배포 명령을 실행합니다.",
-      "check": "Restarted service",
+      "id": "release-to-https-step-4",
+      "label": "Runtime verify",
+      "problem": "배포 명령 종료는 서비스 정상 증거가 아닙니다.",
+      "concept": "Image and HTTPS evidence",
+      "action": "exact revision, redirect와 readiness를 확인합니다.",
+      "check": "원격 script와 외부 curl을 함께 봅니다.",
       "codePointIds": [
-        "workflow-stages",
-        "inline-deploy-steps"
+        "verify-and-rollback"
       ]
     },
     {
-      "id": "build-deploy-verify-step-4",
-      "label": "Log check step",
-      "problem": "Running service",
-      "concept": "Log check step",
-      "action": "compose 상태와 앱 로그로 배포 결과를 확인합니다.",
-      "check": "Deployment result",
-      "codePointIds": [
-        "inline-deploy-steps",
-        "workflow-stages"
-      ]
+      "id": "release-to-https-step-5",
+      "label": "Cutover ingress",
+      "problem": "첫 전환 복구 경로는 HTTPS 성공이 확인될 때까지 필요합니다.",
+      "concept": "Safe cutover window",
+      "action": "외부 HTTPS 성공 직후 public 8080 인바운드를 닫습니다.",
+      "check": "80·443은 유지되고 8080 규칙만 제거됐는지 확인합니다."
     }
   ],
   "codePoints": [
     {
-      "id": "workflow-stages",
-      "title": "실습 시작 workflow는 deploy가 build를 기다리는 뼈대를 제공합니다",
+      "id": "tag-trigger",
+      "title": "운영 배포는 tag push와 직렬화된 production gate에서만 시작됩니다",
       "file": ".github/workflows/deploy.yml",
       "language": "yaml",
-      "snippet": "  deploy:\n    runs-on: ubuntu-latest\n    needs: build\n    env:\n      RELEASE_DIR: /home/${{ secrets.EC2_USERNAME }}/aandi-deployment-runtime-lab\n      APP_IMAGE: aandi-deployment-runtime-lab:latest\n    steps:\n      - name: Download release artifact\n        # TODO 4. build job이 올린 artifact를 다시 내려받으세요.",
-      "explanation": "실습 시작 파일의 실제 발췌입니다. `needs: build`는 있지만 artifact download와 뒤의 원격 작업은 TODO라서 완성 pipeline 증거가 아닙니다.",
-      "check": "TODO를 채운 실제 run에서 build 실패가 deploy를 막는지 확인합니다."
+      "snippet": "on:\n  push:\n    tags:\n      - \"deploy-https-v*.*.*\"\n\npermissions:\n  contents: read\n\nconcurrency:\n  group: production-deployment\n  cancel-in-progress: false",
+      "explanation": "09 HTTP tag와 일반 branch push를 제외한 HTTPS 전용 tag event만 workflow를 열고, 같은 production runtime을 바꾸는 두 run은 동시에 진행하지 않습니다.",
+      "check": "실제 run에서는 뒤의 검증 step이 annotated tag object와 target SHA까지 확인해야 합니다."
     },
     {
-      "id": "inline-deploy-steps",
-      "title": "현재 가이드의 들여쓰기된 ENV는 원격 deploy를 막습니다",
+      "id": "dns-gate",
+      "title": "원격 파일 전송 전에 도메인과 EC2 주소 집합을 비교합니다",
       "file": ".github/workflows/deploy.yml",
-      "language": "yaml",
-      "snippet": "            MYSQL_DATABASE=${{ secrets.PROD_MYSQL_DATABASE }}\n            MYSQL_ROOT_PASSWORD=${{ secrets.PROD_MYSQL_ROOT_PASSWORD }}\n            ENV\n            docker build -t ${APP_IMAGE} .\n            docker compose --env-file .env -f deploy/compose.prod.yaml up -d\n            docker compose --env-file .env -f deploy/compose.prod.yaml ps\n            docker logs --tail 50 aandi-app\n          EOF",
-      "explanation": "현재 가이드 workflow의 실제 발췌입니다. YAML 공통 들여쓰기가 제거돼도 `ENV` 앞 공백이 남아 inner heredoc이 닫히지 않고 뒤 docker 명령이 `.env`로 소비될 수 있습니다.",
-      "check": "들여쓰기 없는 종료자나 `printf` 방식으로 수정한 뒤 원격 command trace를 확인합니다."
+      "language": "python",
+      "snippet": "if not domain_ipv4 or not target_ipv4:\n    print(\"::error::PROD_DOMAIN or EC2_HOST did not resolve to IPv4.\")\n    raise SystemExit(1)\nif domain_ipv4 != target_ipv4:\n    print(\"::error::Every PROD_DOMAIN A record must match the EC2 deployment target.\")\n    raise SystemExit(1)\nif domain_ipv6:\n    print(\"::error::PROD_DOMAIN must not publish AAAA records for this IPv4-only deployment.\")\n    raise SystemExit(1)",
+      "explanation": "이 비교가 실패하면 Configure SSH와 staging upload가 열리지 않아 현재 EC2 runtime을 그대로 둡니다.",
+      "check": "workflow error와 이후 remote step의 skipped 상태를 확인합니다."
+    },
+    {
+      "id": "staging-validation",
+      "title": "새 배포 파일은 `.deploy-next`와 `.env.next`에서 먼저 검증합니다",
+      "file": ".github/workflows/deploy.yml",
+      "language": "bash",
+      "snippet": "chmod 600 .env.next\ngrep -Fxq \"APP_IMAGE='${app_image}'\" .env.next\ngrep -Fxq \"APP_DOMAIN='${app_domain}'\" .env.next\ngrep -Fxq \"CERTBOT_EMAIL='${certbot_email}'\" .env.next\nbash -n \\\n  \"${next_bundle}/scripts/ensure-compose.sh\" \\\n  \"${next_bundle}/scripts/deploy.sh\" \\\n  \"${next_bundle}/scripts/check-deploy.sh\"\nenv -u APP_IMAGE docker compose \\\n  --env-file .env.next \\\n  -f \"${next_bundle}/deploy/compose.prod.yaml\" \\\n  config --quiet",
+      "explanation": "새 env와 Compose가 유효한 경우에만 현재 파일로 설치하고, 기존 env와 bundle은 rollback 입력으로 보존합니다.",
+      "check": "`.env.next` mode 600, Compose config와 previous snapshot 생성 순서를 확인합니다."
+    },
+    {
+      "id": "certificate-bootstrap",
+      "title": "인증서가 없으면 HTTP 전용 Nginx를 먼저 열고 Certbot을 실행합니다",
+      "file": "scripts/deploy.sh",
+      "language": "bash",
+      "snippet": "BOOTSTRAP_NGINX_STARTED=1\nNGINX_TEMPLATE=http.conf.template \\\n  compose up -d --no-deps --force-recreate nginx\nwait_for_healthy_service nginx\n\necho \"Requesting the initial TLS certificate for $APP_DOMAIN...\"\ncompose run --rm --no-deps --entrypoint certbot certbot certonly \\\n  --non-interactive \\\n  --agree-tos \\\n  --no-eff-email \\\n  --email \"$CERTBOT_EMAIL\" \\\n  --webroot \\",
+      "explanation": "HTTP-01 proof와 certificate usability가 확인되기 전에는 새 app image를 pull하거나 HTTPS config로 전환하지 않습니다.",
+      "check": "Nginx bootstrap health, Certbot log와 persistent volume의 certificate files를 확인합니다."
+    },
+    {
+      "id": "https-proxy",
+      "title": "외부 TLS 요청은 header 정보를 유지한 채 내부 app으로 전달됩니다",
+      "file": "deploy/nginx/https.conf.template",
+      "language": "nginx",
+      "snippet": "proxy_pass http://app:8080;\nproxy_http_version 1.1;\nproxy_set_header Host $host;\nproxy_set_header X-Real-IP $remote_addr;\nproxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\nproxy_set_header X-Forwarded-Host $host;\nproxy_set_header X-Forwarded-Proto https;\nproxy_set_header Upgrade $http_upgrade;\nproxy_set_header Connection $connection_upgrade;\nproxy_read_timeout 65s;",
+      "explanation": "app의 8080은 host port가 아니라 Docker network endpoint이며 Spring Boot는 forwarded header로 외부 HTTPS origin을 해석합니다.",
+      "check": "Compose의 app expose와 Nginx 80·443 ports, proxy header를 함께 확인합니다."
+    },
+    {
+      "id": "verify-and-rollback",
+      "title": "rollback이 성공해도 실패한 release의 결과는 성공으로 바꾸지 않습니다",
+      "file": "scripts/check-deploy.sh",
+      "language": "bash",
+      "snippet": "if verify_deployment; then\n  echo \"Deployment verified: $APP_IMAGE ($APP_VERSION)\"\n  exit 0\nfi\n\necho \"Deployment verification failed; attempting rollback when possible.\" >&2\nif ! rollback; then\n  echo \"Rollback was unavailable or unsuccessful.\" >&2\nfi\n\n# A successful rollback does not make the attempted deployment successful.\nexit 1",
+      "explanation": "이전 service readiness 복구는 사용자의 가용성을 되살리는 증거이고, 새 release의 검증 결과는 원래 non-zero로 남습니다.",
+      "check": "이전 image와 readiness 복구 뒤에도 verify job이 failed인지 확인합니다."
     }
   ],
   "concepts": [
     {
-      "title": "CI는 먼저 멈추는 장치입니다",
-      "body": "빌드와 테스트가 실패하면 deploy 단계로 넘어가지 않게 합니다."
+      "title": "Release identity는 SHA로 고정합니다",
+      "body": "사람이 읽는 release alias와 실제 Compose가 실행하는 40자리 SHA image를 분리합니다."
     },
     {
-      "title": "CD는 검증된 산출물을 실행 환경으로 옮깁니다",
-      "body": "배포는 파일 전달과 실행 전환, 상태 확인까지 포함합니다."
+      "title": "TLS 전환은 certificate bootstrap을 가집니다",
+      "body": "DNS와 외부 80에서 HTTP-01을 통과한 뒤 certificate files를 가진 Nginx 443을 시작합니다."
     },
     {
-      "title": "Verify는 완료 기준입니다",
-      "body": "서비스가 실제로 응답하는지 확인해야 배포 성공을 말할 수 있습니다."
+      "title": "Verify는 배포 명령보다 넓습니다",
+      "body": "service health, exact image identity, redirect와 외부 HTTPS readiness를 함께 판정합니다."
     },
     {
-      "title": "Secret은 workflow 입력입니다",
-      "body": "Workflow YAML에는 `${{ secrets.* }}` 참조만 두지만 실행 시 실제 값은 EC2 `.env`에 기록됩니다. 현재 workflow는 이 파일 권한을 별도로 강화하지 않습니다."
+      "title": "Rollback은 시도 결과를 지우지 않습니다",
+      "body": "이전 runtime을 복구해도 실패한 새 release는 workflow 실패로 기록합니다."
     }
   ],
   "practice": [
-    "build가 실패하면 deploy가 실행되지 않아야 하는 이유를 설명할 수 있나요?",
-    "artifact가 workflow 단계 사이에서 어떤 역할을 하는지 말할 수 있나요?",
-    "release bundle이 서버로 전달되는 이유를 설명할 수 있나요?",
-    "배포 후 compose 상태와 앱 로그를 확인해야 하는 이유를 말할 수 있나요?"
+    "tag alias가 아니라 40자리 SHA image를 실행해야 하는 이유를 설명할 수 있나요?",
+    "DNS 검증과 외부 80이 각각 어느 HTTPS gate에 필요한지 말할 수 있나요?",
+    "첫 외부 HTTPS 검증 전에는 왜 8080 인바운드를 유지하고 성공 직후 닫아야 하는지 설명할 수 있나요?",
+    "rollback 성공과 새 release 성공을 분리해 말할 수 있나요?"
   ],
   "mentorHints": [],
   "relatedDocs": [],
   "relatedCode": [],
-  "topic": "Automation and operations flow",
-  "question": "한 번 성공한 배포 흐름을 어떻게 반복 가능하고 실패에 강하게 만들까?",
+  "topic": "Tag release, HTTPS transition, and rollback",
+  "question": "태그로 시작한 release를 어디까지 확인해야 HTTPS 운영 배포 성공이라고 말할 수 있을까?",
   "source": {
     "theory": "../../../theory.md",
     "implementation": "../../../implementation.md",
     "checklist": "../../../checklist.md"
   },
   "why": {
-    "problem": "사람이 매번 같은 배포 명령을 손으로 반복하면 순서가 흔들리고 실패 기준이 누락될 수 있습니다.",
+    "problem": "image 게시, certificate 준비와 application readiness는 서로 다른 경계에서 실패합니다.",
     "limits": [
-      "build 실패 후 deploy가 이어지면 실패 원인이 더 커집니다.",
-      "deploy 명령만 자동화하고 verify를 빼면 서비스 정상 여부를 확인하지 못합니다.",
-      "workflow step의 책임이 흐려지면 실패 지점을 읽기 어려워집니다."
+      "도메인 주소가 다르면 SSH 전에 배포를 멈춰야 합니다.",
+      "인증서가 없으면 HTTPS config보다 HTTP-01 endpoint가 먼저 필요합니다.",
+      "새 image가 실행돼도 readiness가 실패하면 이전 runtime을 복구해야 합니다."
     ],
-    "choice": "workflow는 test/build, bundle, upload, EC2 deploy, 로그 확인을 step 순서로 고정합니다."
+    "choice": "tag, DNS·ACME, Nginx와 runtime verify를 독립 gate로 두고 first failure 뒤의 작업을 차단합니다."
   },
   "overview": [
-    "Push",
-    "GitHub Actions",
-    "Test",
-    "Build",
-    "Artifact",
-    "Upload",
-    "EC2 Deploy",
-    "Log Check"
+    "Annotated tag",
+    "Exact SHA image",
+    "Staging bundle",
+    "DNS and HTTP-01",
+    "Nginx HTTPS",
+    "Runtime verify",
+    "Close public 8080",
+    "Rollback"
   ],
   "responsibilities": [
     {
-      "name": "CI workflow",
-      "role": "build와 test 기준을 자동으로 확인합니다.",
-      "caution": "검증 없이 deploy로 넘어가지 않습니다."
+      "name": "Publish job",
+      "role": "tag와 source revision을 검증하고 exact SHA image를 게시합니다.",
+      "caution": "release alias를 실제 Compose image 입력으로 사용하지 않습니다."
     },
     {
-      "name": "Artifact",
-      "role": "검증된 빌드 결과물을 다음 단계로 전달합니다.",
-      "caution": "source와 실행 산출물을 혼동하지 않습니다."
+      "name": "Deploy job and script",
+      "role": "runtime env, DNS, staging bundle, certificate와 app 교체 순서를 고정합니다.",
+      "caution": "certificate usability 전에는 새 app을 교체하지 않습니다."
     },
     {
-      "name": "Upload/Deploy steps",
-      "role": "release bundle 업로드와 EC2 배포 명령을 실행합니다.",
-      "caution": "업로드와 재기동 순서를 바꾸지 않습니다."
+      "name": "Nginx and Certbot",
+      "role": "HTTP-01, TLS 종료, proxy와 certificate 갱신 수명주기를 맡습니다.",
+      "caution": "app image rollback과 certificate volume을 같은 수명으로 다루지 않습니다."
     },
     {
-      "name": "Log check step",
-      "role": "배포 후 compose 상태와 앱 로그를 확인합니다.",
-      "caution": "로그 확인을 생략하면 실패한 배포를 놓칠 수 있습니다."
+      "name": "Verify job",
+      "role": "실행 identity와 외부 HTTPS readiness를 최종 성공 증거로 확인하고 operator의 8080 종료 시점을 만듭니다.",
+      "caution": "외부 HTTPS 성공 전에 rollback port를 닫거나, rollback 성공을 시도한 release의 성공으로 바꾸지 않습니다."
     }
   ],
   "glossary": [
     {
-      "term": "CI",
-      "meaning": "변경된 코드가 빌드되고 테스트되는지 자동으로 확인하는 흐름입니다.",
-      "caution": "실패 후 deploy가 이어지면 안 됩니다."
+      "term": "A record",
+      "meaning": "도메인 이름을 IPv4 주소로 연결하는 DNS record입니다.",
+      "caution": "현재 단일 IPv4 배포에서는 domain의 주소 집합이 EC2 target과 같아야 합니다."
     },
     {
-      "term": "CD",
-      "meaning": "검증된 결과물을 실행 환경으로 전달하고 배포하는 흐름입니다.",
-      "caution": "전달만으로 서비스 정상 여부가 보장되지는 않습니다."
+      "term": "HTTP-01",
+      "meaning": "인증기관이 공개 80번의 token 경로를 읽어 도메인 제어권을 확인합니다.",
+      "caution": "DNS가 맞아도 외부 80이 막히면 최초 발급과 필요한 갱신이 실패합니다."
     },
     {
-      "term": "Artifact",
-      "meaning": "build job이 만든 배포 가능한 산출물입니다.",
-      "caution": "source code와 실행 파일을 구분해야 합니다."
+      "term": "Forwarded header",
+      "meaning": "proxy 앞의 원래 host, scheme과 client 정보를 app에 전달합니다.",
+      "caution": "Spring Boot가 이를 반영하지 않으면 HTTPS 뒤에서 잘못된 origin을 만들 수 있습니다."
     },
     {
-      "term": "Verify",
-      "meaning": "배포 후 서비스 상태와 로그를 확인하는 단계입니다.",
-      "caution": "컨테이너 상태와 로그를 함께 봅니다."
-    },
-    {
-      "term": "Secret",
-      "meaning": "repository의 `${{ secrets.* }}` 참조가 실행 시 실제 값으로 펼쳐져 원격 `.env`에 기록되는 민감한 설정입니다.",
-      "caution": "YAML에 참조만 있다는 사실은 EC2 `.env` 권한 보호를 뜻하지 않습니다. 현재 workflow에는 별도 chmod·chown·umask가 없습니다."
+      "term": "Readiness",
+      "meaning": "현재 application이 DB·Redis를 포함해 요청을 받을 준비가 됐는지 나타냅니다.",
+      "caution": "container running이나 명령 종료만으로 readiness를 대신하지 않습니다."
     }
   ],
   "practical": [
     {
-      "title": "실패 차단이 자동화의 핵심입니다",
-      "body": "성공 경로를 빠르게 만드는 것보다 실패 후 다음 단계로 넘어가지 않는 것이 더 중요합니다."
+      "title": "첫 실패 gate부터 봅니다",
+      "body": "tag, DNS, HTTP-01, image identity와 readiness 중 처음 non-zero가 된 증거를 원인 분석의 시작점으로 둡니다."
     },
     {
-      "title": "workflow와 script 책임을 분리합니다",
-      "body": "workflow는 job 순서를 조율하고 deploy.sh와 check-deploy.sh는 서버 갱신과 검증을 각각 맡습니다."
+      "title": "공개 port와 내부 port를 분리합니다",
+      "body": "첫 09→10 전환 중에는 복구 접근용 public 8080을 외부 HTTPS 검증까지 유지하고 성공 직후 닫습니다. 이후 Spring Boot 8080은 Compose network 안에서만 proxy target으로 사용합니다."
     },
     {
-      "title": "verify 없는 deploy는 완료가 아닙니다",
-      "body": "프로세스가 올라왔는지, compose 상태와 앱 로그가 정상인지 확인해야 운영 흐름이 끝납니다."
+      "title": "장기 상태는 release와 함께 지우지 않습니다",
+      "body": "MySQL data와 certificate named volume은 app image 교체와 rollback에서 보존합니다."
     }
   ],
   "checks": [
-    "build가 실패하면 deploy가 실행되지 않아야 하는 이유를 설명할 수 있나요?",
-    "artifact가 workflow 단계 사이에서 어떤 역할을 하는지 말할 수 있나요?",
-    "release bundle이 서버로 전달되는 이유를 설명할 수 있나요?",
-    "배포 후 compose 상태와 앱 로그를 확인해야 하는 이유를 말할 수 있나요?"
+    "tag alias가 아니라 40자리 SHA image를 실행해야 하는 이유를 설명할 수 있나요?",
+    "DNS 검증과 외부 80이 각각 어느 HTTPS gate에 필요한지 말할 수 있나요?",
+    "첫 외부 HTTPS 검증 전에는 왜 8080 인바운드를 유지하고 성공 직후 닫아야 하는지 설명할 수 있나요?",
+    "rollback 성공과 새 release 성공을 분리해 말할 수 있나요?"
   ],
   "next": {
     "id": "11",
     "title": "Refactoring Foundation",
-    "reason": "자동화가 변경 후 동작을 확인해주기 시작하면, 다음에는 코드 구조를 작게 정리하며 테스트로 동작 보존을 확인합니다."
+    "reason": "HTTPS 배포 gate가 변경 뒤 실행 증거를 고정하면, 다음에는 테스트와 함께 구조를 작게 정리합니다."
   },
   "sourceDocs": []
 };
