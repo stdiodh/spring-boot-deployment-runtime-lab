@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (( $# != 3 )); then
-  echo "Usage: $0 RELEASE_DIR APP_IMAGE APP_VERSION" >&2
+if (( $# < 4 || $# > 5 )); then
+  echo \
+    "Usage: $0 RELEASE_DIR APP_IMAGE APP_VERSION APP_DOMAIN [--rollback-only]" \
+    >&2
   exit 2
 fi
 
 RELEASE_DIR="$1"
 APP_IMAGE="$2"
 APP_VERSION="$3"
+APP_DOMAIN="$4"
+MODE="${5-}"
 COMPOSE_FILE="$RELEASE_DIR/deploy/compose.prod.yaml"
 ENV_FILE="$RELEASE_DIR/.env"
 PREVIOUS_ENV_FILE="$RELEASE_DIR/.env.previous"
 PREVIOUS_IMAGE_FILE="$RELEASE_DIR/.previous-image"
-VERIFY_URL="${VERIFY_URL:-http://localhost:8080/actuator/health/readiness}"
+PREVIOUS_BUNDLE_DIR="$RELEASE_DIR/.deploy.previous"
+VERIFY_URL="${VERIFY_URL:-https://${APP_DOMAIN}/actuator/health/readiness}"
 VERIFY_ATTEMPTS="${VERIFY_ATTEMPTS:-30}"
 VERIFY_INTERVAL_SECONDS="${VERIFY_INTERVAL_SECONDS:-2}"
 HEALTH_ATTEMPTS="${HEALTH_ATTEMPTS:-60}"
@@ -29,6 +34,12 @@ is_immutable_image() {
     [[ "$1" =~ @sha256:[0-9a-fA-F]{64}$ || "$1" =~ :[0-9a-fA-F]{40}$ ]]
 }
 
+is_domain_name() {
+  local domain_pattern='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
+
+  (( ${#1} <= 253 )) && [[ "$1" =~ $domain_pattern ]]
+}
+
 [[ -d "$RELEASE_DIR" ]] || fail_without_rollback "Release directory was not found."
 [[ -f "$COMPOSE_FILE" ]] ||
   fail_without_rollback "Production Compose file was not found."
@@ -41,6 +52,10 @@ is_immutable_image "$APP_IMAGE" ||
     "APP_IMAGE must be an exact immutable digest or 40-character commit tag."
 [[ "$APP_VERSION" =~ ^[0-9a-fA-F]{40}$ ]] ||
   fail_without_rollback "APP_VERSION must be the exact 40-character commit revision."
+is_domain_name "$APP_DOMAIN" ||
+  fail_without_rollback "APP_DOMAIN must be a lowercase fully qualified domain name."
+[[ -z "$MODE" || "$MODE" == "--rollback-only" ]] ||
+  fail_without_rollback "The optional mode must be --rollback-only."
 [[ "$VERIFY_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] ||
   fail_without_rollback "VERIFY_ATTEMPTS must be a positive integer."
 [[ "$VERIFY_INTERVAL_SECONDS" =~ ^[1-9][0-9]*$ ]] ||
@@ -58,6 +73,54 @@ compose() {
     --env-file "$ENV_FILE" \
     -f "$COMPOSE_FILE" \
     "$@"
+}
+
+compose_has_service() {
+  compose config --services 2>/dev/null | grep -Fxq "$1"
+}
+
+ensure_image_available() {
+  docker image inspect "$APP_IMAGE" >/dev/null 2>&1 || compose pull app
+}
+
+restore_previous_bundle() {
+  local previous_file=""
+  local target_file=""
+
+  [[ -f "$PREVIOUS_BUNDLE_DIR/.ready" ]] || return 1
+  [[ -f "$PREVIOUS_BUNDLE_DIR/deploy/compose.prod.yaml" ]] || return 1
+
+  install -m 755 -d "$RELEASE_DIR/deploy/nginx" "$RELEASE_DIR/scripts"
+  install -m 644 \
+    "$PREVIOUS_BUNDLE_DIR/deploy/compose.prod.yaml" \
+    "$COMPOSE_FILE"
+
+  for relative_file in \
+    deploy/nginx/http.conf.template \
+    deploy/nginx/https.conf.template
+  do
+    previous_file="$PREVIOUS_BUNDLE_DIR/$relative_file"
+    target_file="$RELEASE_DIR/$relative_file"
+    if [[ -f "$previous_file" ]]; then
+      install -m 644 "$previous_file" "$target_file"
+    else
+      rm -f "$target_file"
+    fi
+  done
+
+  for relative_file in \
+    scripts/ensure-compose.sh \
+    scripts/deploy.sh \
+    scripts/check-deploy.sh
+  do
+    previous_file="$PREVIOUS_BUNDLE_DIR/$relative_file"
+    target_file="$RELEASE_DIR/$relative_file"
+    if [[ -f "$previous_file" ]]; then
+      install -m 755 "$previous_file" "$target_file"
+    else
+      rm -f "$target_file"
+    fi
+  done
 }
 
 service_container_id() {
@@ -86,6 +149,26 @@ service_is_healthy() {
   }
 }
 
+service_is_running() {
+  local service="$1"
+  local container_id=""
+  local service_status=""
+
+  container_id="$(service_container_id "$service" || true)"
+  [[ -n "$container_id" ]] || {
+    echo "$service container was not found." >&2
+    return 1
+  }
+
+  service_status="$(
+    docker inspect --format '{{.State.Status}}' "$container_id" 2>/dev/null || true
+  )"
+  [[ "$service_status" == "running" ]] || {
+    echo "$service is not running (status: $service_status)." >&2
+    return 1
+  }
+}
+
 wait_for_healthy_service() {
   local service="$1"
   local attempt
@@ -104,7 +187,9 @@ wait_for_healthy_service() {
 }
 
 http_is_ready() {
-  curl --fail --silent --show-error --max-time 5 "$VERIFY_URL" >/dev/null
+  curl --fail --silent --show-error --max-time 5 \
+    --resolve "${APP_DOMAIN}:443:127.0.0.1" \
+    "$VERIFY_URL" >/dev/null
 }
 
 wait_for_http() {
@@ -123,6 +208,42 @@ wait_for_http() {
   return 1
 }
 
+wait_for_legacy_http() {
+  local attempt
+
+  for ((attempt = 1; attempt <= VERIFY_ATTEMPTS; attempt++)); do
+    if curl --fail --silent --show-error --max-time 5 \
+      http://127.0.0.1:8080/actuator/health/readiness >/dev/null
+    then
+      return 0
+    fi
+
+    echo "Waiting for rollback HTTP readiness (${attempt}/${VERIFY_ATTEMPTS})..."
+    sleep "$VERIFY_INTERVAL_SECONDS"
+  done
+
+  return 1
+}
+
+http_redirects_to_https() {
+  local redirect_target=""
+
+  redirect_target="$(
+    curl --silent --show-error --max-time 5 \
+      --resolve "${APP_DOMAIN}:80:127.0.0.1" \
+      --output /dev/null \
+      --write-out '%{redirect_url}' \
+      "http://${APP_DOMAIN}/"
+  )"
+  [[ "$redirect_target" == "https://${APP_DOMAIN}/" ]]
+}
+
+prepare_rollback_environment() {
+  local target_file="$1"
+
+  install -m 600 "$PREVIOUS_ENV_FILE" "$target_file"
+}
+
 verify_deployment() {
   local app_container_id=""
   local actual_status=""
@@ -134,6 +255,8 @@ verify_deployment() {
 
   service_is_healthy mysql || return 1
   service_is_healthy redis || return 1
+  service_is_healthy nginx || return 1
+  service_is_running certbot || return 1
 
   app_container_id="$(service_container_id app || true)"
   [[ -n "$app_container_id" ]] || {
@@ -197,6 +320,10 @@ verify_deployment() {
     echo "Application readiness check did not succeed." >&2
     return 1
   }
+  http_redirects_to_https || {
+    echo "HTTP did not redirect to the production HTTPS origin." >&2
+    return 1
+  }
 }
 
 rollback() {
@@ -214,8 +341,12 @@ rollback() {
     return 1
   }
 
-  install -m 600 "$PREVIOUS_ENV_FILE" "$rollback_env_tmp"
+  prepare_rollback_environment "$rollback_env_tmp"
   mv -f "$rollback_env_tmp" "$ENV_FILE"
+  restore_previous_bundle || {
+    echo "Previous deployment bundle is unavailable; rollback stopped." >&2
+    return 1
+  }
   APP_IMAGE="$previous_image"
   export APP_IMAGE
 
@@ -223,15 +354,37 @@ rollback() {
   compose up -d --no-recreate mysql redis || return 1
   wait_for_healthy_service mysql || return 1
   wait_for_healthy_service redis || return 1
-  compose pull app || return 1
+  ensure_image_available || return 1
   compose up -d --no-deps --force-recreate app || return 1
-  wait_for_http "rollback" || {
-    echo "Rollback application did not become ready." >&2
-    return 1
-  }
+  if compose_has_service nginx; then
+    compose up -d --no-deps --force-recreate nginx || return 1
+    wait_for_healthy_service nginx || return 1
+    compose up -d --no-deps certbot || return 1
+    service_is_running certbot || return 1
+    wait_for_http "rollback" || {
+      echo "Rollback application did not become ready." >&2
+      return 1
+    }
+    http_redirects_to_https || {
+      echo "Rollback HTTP redirect did not recover." >&2
+      return 1
+    }
+  else
+    docker rm -f aandi-certbot aandi-nginx >/dev/null 2>&1 || true
+    wait_for_legacy_http || {
+      echo "Rollback HTTP application did not become ready." >&2
+      return 1
+    }
+  fi
 
   echo "Previous application release is ready." >&2
 }
+
+if [[ "$MODE" == "--rollback-only" ]]; then
+  echo "External HTTPS verification failed; restoring the previous release." >&2
+  rollback
+  exit 0
+fi
 
 if verify_deployment; then
   echo "Deployment verified: $APP_IMAGE ($APP_VERSION)"
